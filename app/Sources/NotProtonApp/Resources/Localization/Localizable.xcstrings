@@ -1645,6 +1645,26 @@
         }
       }
     },
+    "Enter at least one verb, like vcrun2022." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请至少输入一个组件，例如 vcrun2022。"
+          }
+        }
+      }
+    },
+    "Enter the Winetricks verbs to install in %@, separated by spaces." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入要安装到“%@”中的 Winetricks 组件，用空格分隔。"
+          }
+        }
+      }
+    },
     "Extracting" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2178,22 +2198,32 @@
         }
       }
     },
-    "NotProton could not download the files it needs from Valve. Please try again later." : {
+    "NotProton could not download the files it needs from %@. Please try again later." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NotProton 无法从 Valve 下载所需文件。请稍后重试。"
+            "value" : "NotProton 无法从 %@ 下载所需文件。请稍后重试。"
           }
         }
       }
     },
-    "NotProton could not reach Valve's servers. Please check your internet connection and try again." : {
+    "NotProton could not reach %@'s servers. Please check your internet connection and try again." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "NotProton 无法连接 Valve 服务器。请检查网络连接，然后重试。"
+            "value" : "NotProton 无法连接 %@ 服务器。请检查网络连接，然后重试。"
+          }
+        }
+      }
+    },
+    "NotProton does not run %@ with Winetricks." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NotProton 不会通过 Winetricks 运行 %@。"
           }
         }
       }
@@ -2914,6 +2944,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "运行程序…"
+          }
+        }
+      }
+    },
+    "Run Winetricks" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行 Winetricks"
           }
         }
       }
@@ -3871,6 +3911,32 @@
         }
       }
     },
+    "Winetricks" : {
+      "shouldTranslate" : false
+    },
+    "Winetricks ran %@ in %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Winetricks 已在“%2$@”中运行 %1$@。"
+          }
+        }
+      }
+    },
+    "Winetricks stopped with status %d. Its output is in %@." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Winetricks 已停止，状态码为 %d。输出位于 %@。"
+          }
+        }
+      }
+    },
+    "Winetricks…" : {
+      "shouldTranslate" : false
+    },
     "You will not lose saves by using this tool." : {
       "localizations" : {
         "zh-Hans" : {
@@ -4060,6 +4126,9 @@
           }
         }
       }
+    },
+    "vcrun2022 corefonts" : {
+      "shouldTranslate" : false
     }
   },
   "version" : "1.0"
