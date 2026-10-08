@@ -1875,6 +1875,16 @@
         }
       }
     },
+    "Launch Log" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动日志"
+          }
+        }
+      }
+    },
     "Library" : {
       "localizations" : {
         "zh-Hans" : {
@@ -2254,6 +2264,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请打开 CrossOver 完成激活。"
+          }
+        }
+      }
+    },
+    "Open Log" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开日志"
           }
         }
       }
@@ -3837,6 +3857,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wine 配置"
+          }
+        }
+      }
+    },
+    "Wine Log" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wine 日志"
           }
         }
       }
