@@ -833,7 +833,9 @@ lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
 [ -x "$lsregister" ] && "$lsregister" -f "$loader_app" >> "$log" 2>&1 || true
 open -n -W -a "$loader_app" "$@" >> "$log" 2>&1 &
 open_pid=$!
-if [ "$verb" = run ]; then
+# Steam passes waitforexitandrun for games and run for helpers such as install
+# scripts, so the game is what gets Game Mode, never the installer.
+if [ "$verb" = waitforexitandrun ]; then
   gamemode_activate
 fi
 status=0
