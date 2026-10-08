@@ -1,5 +1,6 @@
 // 'Status' view, see SystemStatus for actual logic
 
+import AppKit
 import SwiftUI
 
 enum StatusTone: Sendable {
@@ -296,6 +297,8 @@ struct StatusView: View {
                     }
                 }
             }
+
+            gameModeSection(snapshot.gameMode)
 
             componentsSection(snapshot.payload)
 
@@ -674,6 +677,97 @@ struct StatusView: View {
                     StatusRow(title: "Signature database", value: "Missing.", tone: .bad)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func gameModeSection(_ state: GameModeState) -> some View {
+        Section {
+            xcodeRow(state)
+            gameModeToggleRow(state)
+        } header: {
+            Text("Game Mode")
+        } footer: {
+            Text(
+                "Game Mode gives games priority CPU and GPU time and lower input latency. "
+                    + "macOS only starts it for games it recognizes, so NotProton forces it on "
+                    + "for games launched from Steam. It needs Xcode, whose gamepolicyctl tool "
+                    + "is the only way to control it, and it runs without admin credentials."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func xcodeRow(_ state: GameModeState) -> some View {
+        if state.ready {
+            StatusRow(
+                title: "Xcode",
+                value: state.xcodeVersion.map { "Found (\($0))." } ?? "Found.",
+                tone: .ok,
+                detail: state.xcode?.path(percentEncoded: false)
+            )
+        } else {
+            StatusRow(
+                title: "Xcode",
+                value: "Not found.",
+                tone: .bad,
+                detail: "Game Mode needs Xcode's gamepolicyctl tool.",
+                action: StatusAction(
+                    label: "Get Xcode",
+                    isProminent: true,
+                    help: "Download Xcode from the Mac App Store.",
+                    isEnabled: true
+                ) {
+                    NSWorkspace.shared.open(GameModeSource.appStoreURL)
+                }
+            )
+        }
+    }
+
+    private func gameModeToggleRow(_ state: GameModeState) -> some View {
+        Toggle(isOn: gameModeOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Turn on Game Mode for games")
+                    .font(.headline)
+                Text(gameModeToggleDetail(state))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.leading, StatusMetrics.textInset)
+        }
+        .disabled(!status.isIdle || !state.ready)
+        .help(
+            state.ready
+                ? "Games launched from Steam force Game Mode on and return it to "
+                    + "automatic when the last one quits."
+                : "Install Xcode to use Game Mode."
+        )
+    }
+
+    private var gameModeOn: Binding<Bool> {
+        Binding(
+            get: { status.snapshot?.gameMode.featureEnabled ?? true },
+            set: { wanted in
+                Task { await status.setGameModeEnabled(wanted) }
+            }
+        )
+    }
+
+    private func gameModeToggleDetail(_ state: GameModeState) -> String {
+        guard state.ready else { return "Install Xcode to use this." }
+        let feature = state.featureEnabled
+            ? "Games launched from Steam turn it on for themselves."
+            : "Games launched from Steam leave it alone."
+        return feature + currentGameModeLine(state)
+    }
+
+    private func currentGameModeLine(_ state: GameModeState) -> String {
+        switch (state.onState, state.policy) {
+        case (.on, .manual): return " Game Mode is forced on right now."
+        case (.on, _): return " Game Mode is on right now."
+        case (.temporarilyOn, _): return " Game Mode is on and will soon turn off."
+        case (.off, .manual): return " Game Mode is forced off right now."
+        case (.off, _): return " Game Mode is off right now."
+        case (.unknown, _): return " Game Mode's current state could not be read."
         }
     }
 }

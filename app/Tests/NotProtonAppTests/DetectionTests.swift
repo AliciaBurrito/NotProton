@@ -155,6 +155,8 @@ struct SupportPathTests {
             .hasSuffix("/notproton/overlay-shim.dylib"))
         #expect(SupportPaths.currentRunner.path(percentEncoded: false)
             .hasSuffix("/notproton/runners/current"))
+        #expect(SupportPaths.gameMode.path(percentEncoded: false)
+            .hasSuffix("/notproton/gamemode"))
         #expect(SupportPaths.Steam.deployedDylib.path(percentEncoded: false)
             == "/Applications/Steam.app/Contents/MacOS/notproton.dylib")
         #expect(SupportPaths.Steam.infoPlist.path(percentEncoded: false)

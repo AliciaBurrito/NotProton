@@ -33,6 +33,10 @@ enum SupportPaths {
     static var iconmaker: URL { support.appending(path: "iconmaker") }
     static var appinfo: URL { support.appending(path: "appinfo") }
 
+    // The Game Mode toggle. The run script reads this file to decide whether a
+    // game launch touches the policy, so the app and the client agree on it.
+    static var gameMode: URL { support.appending(path: "gamemode") }
+
     static var packageDownloads: URL {
         home.appending(path: "Library/Caches/\(supportDirName)/valve-packages")
     }

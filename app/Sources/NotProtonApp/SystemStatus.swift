@@ -24,6 +24,7 @@ struct StatusSnapshot: Sendable {
     var installedRunners: [RunnerBuild] = []
     var orphanedRunners: [String] = []
     var damagedRunners: [String] = []
+    var gameMode: GameModeState = GameModeState.neutral
 
     static func capture(bundledVersion: String) -> StatusSnapshot {
         let installs = CrossOverSource.discover()
@@ -46,7 +47,8 @@ struct StatusSnapshot: Sendable {
             ),
             installedRunners: RunnerStore.installedBuilds(),
             orphanedRunners: RunnerStore.orphanedClones(),
-            damagedRunners: RunnerStore.damagedClones()
+            damagedRunners: RunnerStore.damagedClones(),
+            gameMode: GameModeSource.capture()
         )
     }
 }
@@ -412,6 +414,30 @@ final class SystemStatus {
 
             try UpdateBlock.remove()
             return "Steam client updates are allowed."
+        }
+    }
+
+    func setGameModeEnabled(_ enabled: Bool) async {
+        guard isIdle else { return }
+        await perform(
+            from: enabled ? "Turning on Game Mode support"
+                          : "Turning off Game Mode support"
+        ) { _ in
+            try await Task.detached(priority: .userInitiated) {
+                try GameModeFeature.setEnabled(enabled)
+            }.value
+
+            // Turning the feature off returns the live policy to automatic, so a
+            // forced-on Game Mode stops being forced as soon as the user asks.
+            if !enabled {
+                _ = try? await Task.detached(priority: .userInitiated) {
+                    try GamePolicyCtl.set("auto")
+                }.value
+            }
+
+            return enabled
+                ? "Game Mode will now turn on for games launched from Steam."
+                : "Game Mode will no longer turn on for games launched from Steam."
         }
     }
 

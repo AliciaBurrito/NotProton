@@ -59,7 +59,27 @@ enum AppLog {
             lines.append("state payload manifest problem: \(problem)")
         }
 
+        lines.append("state gameMode \(describe(snapshot.gameMode))")
+
         for line in lines { note(line) }
+    }
+
+    private static func describe(_ gameMode: GameModeState) -> String {
+        let onState: String
+        switch gameMode.onState {
+        case .unknown: onState = "unknown"
+        case .off: onState = "off"
+        case .on: onState = "on"
+        case .temporarilyOn: onState = "temporarily on"
+        }
+        let policy: String
+        switch gameMode.policy {
+        case .unknown: policy = "unknown"
+        case .automatic: policy = "automatic"
+        case .manual: policy = "manual"
+        }
+        return "ready=\(gameMode.ready) on=\(onState) policy=\(policy) "
+            + "feature=\(gameMode.featureEnabled ? "on" : "off")"
     }
 
     private static func describe(_ steam: SteamDeployment) -> String {

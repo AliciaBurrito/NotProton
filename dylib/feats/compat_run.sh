@@ -575,7 +575,9 @@ $icon_arg
 </plist>
 PLIST
 
-# Invokes macOS Game Mode
+# Stages the wine tree inside the bundle so macOS treats the launcher as a real
+# app with a dock tile. (macOS Game Mode itself is handled by gamepolicyctl,
+# further down, because this staging no longer triggers it on its own.)
 for f in "$wine_unix"/*; do
   [ -e "$f" ] || continue
   base=${f##*/}
@@ -587,9 +589,9 @@ done
 ln "$WINELOADER" "$loader_macos/wine" 2>/dev/null || cp "$WINELOADER" "$loader_macos/wine"
 if [ -x "$loader_macos/wine" ]; then
   WINELOADER="$loader_macos/wine"
-  echo "loader staged in bundle for game mode" >> "$log" 2>&1 || true
+  echo "loader staged in bundle" >> "$log" 2>&1 || true
 else
-  echo "loader staging failed, game mode unavailable" >> "$log" 2>&1 || true
+  echo "loader staging failed, the game runs from the wine tree without a dock tile" >> "$log" 2>&1 || true
 fi
 
 cat > "$loader_macos/launcher" <<LAUNCHER
@@ -669,10 +671,132 @@ kill_wine_prefix() {
 # shellcheck disable=SC2329 # the trap below invokes this
 terminate() {
   echo "=== termination signal received, killing wine prefix ===" >> "$log" 2>&1 || true
+  gamemode_release
   kill_wine_prefix
-  [ -n "$open_pid" ] && kill "$open_pid" 2>/dev/null || true
+  [ -n "$open_pid" ] && kill "$open_pid" 2>&1 || true
 }
 trap terminate TERM INT HUP
+
+# macOS Game Mode: force it on while a game runs and return it to automatic when
+# the last session ends. The only way to control Game Mode is gamepolicyctl, which
+# ships with Xcode, and it runs without admin credentials, so none of this asks
+# the user for anything. The NotProton app's Game Mode toggle writes gamemode_cfg;
+# an absent file means enabled, and NOTPROTON_GAMEMODE overrides it for testing.
+gamemode_cfg="$HOME/Library/Application Support/notproton/gamemode"
+gamemode_sessions="$HOME/Library/Application Support/notproton/gamemode-sessions"
+gamemode_on=0
+gamemode_session=""
+
+gamemode_feature_on() {
+  case "${NOTPROTON_GAMEMODE:-}" in
+    0|off|disabled) return 1 ;;
+  esac
+  [ -f "$gamemode_cfg" ] || return 0
+  case "$(head -n 1 "$gamemode_cfg" 2>/dev/null | tr -d ' \t')" in
+    enabled) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# xcrun reports the missing utility and fails, so one test covers no Xcode at all
+gamemode_tool_ok() {
+  command -v xcrun >/dev/null 2>&1 && xcrun -f gamepolicyctl >/dev/null 2>&1
+}
+
+# Escapes a string for use as an AppleScript literal
+gamemode_escape() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+# macOS only posts its own notification when it switched Game Mode on itself, so
+# this one is NotProton's. Failing to notify is not a reason to fail the launch.
+gamemode_notify() {
+  /usr/bin/osascript >/dev/null 2>&1 <<APPLESCRIPT || true
+display notification "$(gamemode_escape "$2")" with title "$(gamemode_escape "$1")"
+APPLESCRIPT
+}
+
+# Called once a game is actually launched. Returns the policy to a stable forced
+# on and records a session marker that the release step counts on.
+gamemode_activate() {
+  gamemode_on=0
+  gamemode_session=""
+  if ! gamemode_feature_on; then
+    echo "=== game mode: feature is off, leaving the policy alone ===" >> "$log" 2>&1 || true
+    return 0
+  fi
+  if ! gamemode_tool_ok; then
+    echo "=== game mode: gamepolicyctl not found, install Xcode to use it ===" >> "$log" 2>&1 || true
+    return 0
+  fi
+  mkdir -p "$gamemode_sessions" 2>/dev/null || true
+
+  current=$(xcrun gamepolicyctl game-mode status 2>/dev/null | sed 's/\033\[[0-9;]*m//g') || current=""
+  will_off=0
+  case "$current" in
+    *"will soon turn off"*) will_off=1 ;;
+  esac
+  case "$current" in
+    *"is on"*)
+      # Already on, so nothing to say; pinning a soon-to-expire one keeps it up.
+      if [ "$will_off" = 1 ] && xcrun gamepolicyctl game-mode set on >> "$log" 2>&1; then
+        gamemode_on=1
+        gamemode_session="$gamemode_sessions/$app_id-$$"
+        : > "$gamemode_session" 2>/dev/null || gamemode_on=0
+        echo "=== game mode: already on, pinned it ===" >> "$log" 2>&1 || true
+      fi
+      ;;
+    *)
+      if xcrun gamepolicyctl game-mode set on >> "$log" 2>&1; then
+        echo "=== game mode: set on (was off) ===" >> "$log" 2>&1 || true
+        gamemode_session="$gamemode_sessions/$app_id-$$"
+        if : > "$gamemode_session" 2>/dev/null; then
+          gamemode_on=1
+        fi
+      else
+        echo "=== game mode: could not set on, the launch continues without it ===" >> "$log" 2>&1 || true
+      fi
+      if [ "$gamemode_on" = 1 ]; then
+        gamemode_notify "Game Mode Enabled" \
+          "$game_name is running with Game Mode on, so the system gives it priority and lower input latency."
+      fi
+      ;;
+  esac
+  return 0
+}
+
+# Ends this session's claim on Game Mode. Only the last session returns the
+# policy to automatic, so a still-running game keeps Game Mode on.
+gamemode_release() {
+  [ "$gamemode_on" = 1 ] || return 0
+  gamemode_on=0
+  rm -f "$gamemode_session" 2>/dev/null || true
+  # A marker whose run script is gone is stale: that session was killed and
+  # never released, and left alone it would hold the policy on forever.
+  # Dropping it requires the owner dead; a reused pid only delays the release.
+  for marker in "$gamemode_sessions"/*; do
+    [ -e "$marker" ] || continue
+    pid="${marker##*/}"
+    pid="${pid##*-}"
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$marker" 2>/dev/null || true
+      echo "=== game mode: dropped stale marker $marker ===" >> "$log" 2>&1 || true
+    fi
+  done
+  last=""
+  for marker in "$gamemode_sessions"/*; do
+    [ -e "$marker" ] || continue
+    last="$marker"
+    break
+  done
+  if [ -z "$last" ]; then
+    xcrun gamepolicyctl game-mode set auto >> "$log" 2>&1 || true
+    echo "=== game mode: last session ended, back to automatic ===" >> "$log" 2>&1 || true
+    gamemode_notify "Game Mode Off" \
+      "Game Mode turned off after $game_name quit. It will turn on automatically for games that start it."
+  fi
+  return 0
+}
 
 shim_exe="C:\\Program Files (x86)\\Steam\\steam.exe"
 
@@ -709,6 +833,9 @@ lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
 [ -x "$lsregister" ] && "$lsregister" -f "$loader_app" >> "$log" 2>&1 || true
 open -n -W -a "$loader_app" "$@" >> "$log" 2>&1 &
 open_pid=$!
+if [ "$verb" = run ]; then
+  gamemode_activate
+fi
 status=0
 seen=0
 idle=0
@@ -735,5 +862,6 @@ while :; do
 done
 echo "=== game exited status=$status, killing wine prefix ===" >> "$log" 2>&1 || true
 kill_wine_prefix
+gamemode_release
 echo "=== wine prefix killed, session ending ===" >> "$log" 2>&1 || true
 exit $status
