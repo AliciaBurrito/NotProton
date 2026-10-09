@@ -826,10 +826,10 @@ struct StatusView: View {
 
     private func gameModeToggleDetail(_ state: GameModeState) -> String {
         guard state.ready else { return "Install Xcode to use this." }
-        let feature = state.featureEnabled
-            ? "Game Mode will automatically enable for non-Mac games."
-        return feature + currentGameModeLine(state)
-    }
+ 		guard state.featureEnabled else { return currentGameModeLine(state) }
+    
+    	return "Game Mode will automatically enable for non-Mac games." + currentGameModeLine(state)
+}
 
     private func currentGameModeLine(_ state: GameModeState) -> String {
         switch (state.onState, state.policy) {

@@ -1436,7 +1436,7 @@ gamemode_activate() {
       fi
       if [ "$gamemode_on" = 1 ]; then
         gamemode_notify "Game Mode: On" \
-         "Press \u2318\u238B to open Game Overlay\n"
+         "$(printf "Press \342\214\230\342\216\213 to open Game Overlay")"
       fi
       ;;
   esac
