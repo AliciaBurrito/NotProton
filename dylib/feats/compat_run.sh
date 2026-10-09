@@ -1435,8 +1435,8 @@ gamemode_activate() {
         echo "=== game mode: could not set on, the launch continues without it ===" >> "$log" 2>&1 || true
       fi
       if [ "$gamemode_on" = 1 ]; then
-        gamemode_notify "Game Mode Enabled" \
-          "$game_name is running with Game Mode on, so the system gives it priority and lower input latency."
+        gamemode_notify "Game Mode: On" \
+         "Press \u2318\u238B to open Game Overlay\n"
       fi
       ;;
   esac
