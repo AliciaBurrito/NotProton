@@ -761,10 +761,10 @@ struct StatusView: View {
             Text("Game Mode")
         } footer: {
             Text(
-                "Game Mode gives games priority CPU and GPU time and lower input latency. "
-                    + "macOS only starts it for games it recognizes, so NotProton forces it on "
-                    + "for games launched from Steam. It needs Xcode, whose gamepolicyctl tool "
-                    + "is the only way to control it, and it runs without admin credentials."
+                "Game Mode gives games resource priority and lower input and bluetooth latency."
+                    + "macOS only enables it for native Mac games, so NotProton forces it on "
+                    + "for Windows games launched from Steam. It requires Xcode, whose gamepolicyctl tool "
+                    + "is the only way to control it."
             )
         }
     }
@@ -827,8 +827,7 @@ struct StatusView: View {
     private func gameModeToggleDetail(_ state: GameModeState) -> String {
         guard state.ready else { return "Install Xcode to use this." }
         let feature = state.featureEnabled
-            ? "Games launched from Steam turn it on for themselves."
-            : "Games launched from Steam leave it alone."
+            ? "Game Mode will automatically enable for non-Mac games."
         return feature + currentGameModeLine(state)
     }
 
