@@ -752,16 +752,23 @@ struct StatusView: View {
         }
     }
 
-@ViewBuilder
+    @ViewBuilder
     private func gameModeSection(_ state: GameModeState) -> some View {
         Section {
             xcodeRow(state)
             gameModeToggleRow(state)
         } header: {
             Text("Game Mode")
+        } footer: {
+            Text(
+                "Game Mode gives games resource priority and lower input and bluetooth latency."
+                    + "macOS only enables it for native Mac games, so NotProton forces it on "
+                    + "for Windows games launched from Steam. It requires Xcode, whose gamepolicyctl tool "
+                    + "is the only way to control it."
+            )
         }
     }
-    
+
     @ViewBuilder
     private func xcodeRow(_ state: GameModeState) -> some View {
         if state.ready {
@@ -792,7 +799,7 @@ struct StatusView: View {
     private func gameModeToggleRow(_ state: GameModeState) -> some View {
         Toggle(isOn: gameModeOn) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Automatic Game Mode Detection")
+                Text("Turn on Game Mode for games")
                     .font(.headline)
                 Text(gameModeToggleDetail(state))
                     .foregroundStyle(.secondary)
@@ -818,12 +825,20 @@ struct StatusView: View {
     }
 
     private func gameModeToggleDetail(_ state: GameModeState) -> String {
-        guard state.ready else { return "Install Xcode to enable" }
+        guard state.ready else { return "Install Xcode to use this." }
+ 		guard state.featureEnabled else { return currentGameModeLine(state) }
     
-        let statusText = state.featureEnabled 
-            ? "Game Mode will automatically enable for Windows games." 
-            : "Game Mode will not automatically enable for Windows games."
-        
-        return statusText
+    	return "Game Mode will automatically enable for non-Mac games." + currentGameModeLine(state)
+}
+
+    private func currentGameModeLine(_ state: GameModeState) -> String {
+        switch (state.onState, state.policy) {
+        case (.on, .manual): return " Game Mode is forced on right now."
+        case (.on, _): return " Game Mode is on right now."
+        case (.temporarilyOn, _): return " Game Mode is on and will soon turn off."
+        case (.off, .manual): return " Game Mode is forced off right now."
+        case (.off, _): return " Game Mode is off right now."
+        case (.unknown, _): return " Game Mode's current state could not be read."
+        }
     }
 }
