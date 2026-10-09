@@ -1470,8 +1470,6 @@ gamemode_release() {
   if [ -z "$last" ]; then
     xcrun gamepolicyctl game-mode set auto >> "$log" 2>&1 || true
     echo "=== game mode: last session ended, back to automatic ===" >> "$log" 2>&1 || true
-    gamemode_notify "Game Mode Off" \
-      "Game Mode turned off after $game_name quit. It will turn on automatically for games that start it."
   fi
   return 0
 }
