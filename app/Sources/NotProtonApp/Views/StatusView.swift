@@ -757,6 +757,7 @@ struct StatusView: View {
         Section {
             xcodeRow(state)
             gameModeToggleRow(state)
+            currentGameModeRow(state)
         } header: {
             Text("Game Mode")
         }
@@ -776,12 +777,10 @@ struct StatusView: View {
                 title: "Xcode",
                 value: "Not found.",
                 tone: .bad,
-                detail: "Game Mode needs Xcode's gamepolicyctl tool.",
+                detail: "Required to enable Game Mode for unsupported games.",
                 action: StatusAction(
                     label: "Get Xcode",
                     isProminent: true,
-                    help: "Download Xcode from the Mac App Store.",
-                    isEnabled: true
                 ) {
                     NSWorkspace.shared.open(GameModeSource.appStoreURL)
                 }
@@ -792,7 +791,7 @@ struct StatusView: View {
     private func gameModeToggleRow(_ state: GameModeState) -> some View {
         Toggle(isOn: gameModeOn) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Automatic Game Mode Detection")
+                Text("Game Mode for unsupported games")
                     .font(.headline)
                 Text(gameModeToggleDetail(state))
                     .foregroundStyle(.secondary)
@@ -802,9 +801,8 @@ struct StatusView: View {
         .disabled(!status.isIdle || !state.ready)
         .help(
             state.ready
-                ? "Games launched from Steam force Game Mode on and return it to "
-                    + "automatic when the last one quits."
-                : "Install Xcode to use Game Mode."
+                ? "Enables Game Mode support for unsupported games."
+                : "Xcode is required to enable Game Mode for unsupported games."
         )
     }
 
@@ -818,12 +816,39 @@ struct StatusView: View {
     }
 
     private func gameModeToggleDetail(_ state: GameModeState) -> String {
-        guard state.ready else { return "Install Xcode to enable" }
-    
-        let statusText = state.featureEnabled 
-            ? "Game Mode will automatically enable for Windows games." 
-            : "Game Mode will not automatically enable for Windows games."
-        
-        return statusText
+        guard state.ready else { return "Requires Xcode to be installed." }
+        return state.featureEnabled
+            ? "Game Mode will trigger for all games, including Windows games."
+            : "Game Mode will only trigger for native macOS games."
+    }
+
+    @ViewBuilder
+    private func currentGameModeRow(_ state: GameModeState) -> some View {
+        StatusRow(
+            title: "Game Mode Status",
+            value: currentGameModeDescription(state),
+            tone: currentGameModeTone(state)
+        )
+    }
+
+    private func currentGameModeTone(_ state: GameModeState) -> StatusTone {
+        switch state.onState {
+        case .on: return .ok
+        case .temporarilyOn: return .warning
+        case .off: return .bad
+        case .unknown: return .neutral
+        }
+    }
+
+    private func currentGameModeDescription(_ state: GameModeState) -> String {
+        switch (state.onState, state.policy) {
+        case (.on, .manual): return "Game Mode is manually enabled."
+        case (.on, .automatic): return "Game Mode is on for a native game."
+        case (.on, .unknown): return "Game Mode is on."
+        case (.temporarilyOn, _): return "Game Mode is temporarily on."
+        case (.off, .manual): return "Game Mode is manually disabled."
+        case (.off, _): return "Game Mode is off."
+        case (.unknown, _): return "Unable to read Game Mode status."
+        }
     }
 }

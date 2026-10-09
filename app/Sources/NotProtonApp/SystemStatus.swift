@@ -482,8 +482,8 @@ final class SystemStatus {
             }
 
             return enabled
-                ? "Game Mode will now turn on for games launched from Steam."
-                : "Game Mode will no longer turn on for games launched from Steam."
+                ? "Game Mode will now turn on for unsupported games."
+    			: "Game Mode will now only turn on for native games."
         }
     }
 
