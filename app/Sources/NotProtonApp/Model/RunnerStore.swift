@@ -108,12 +108,18 @@ enum CompatToolList {
 
     // legacyHolder reads runners/current, so this has to run before prune deletes that symlink.
     private static func resolved(
-        runners: URL, file: URL
+        runners: URL, file: URL, fexAvailable: Bool = CompatTool.Flavor.fexAvailable
     ) -> (builds: [RunnerBuild], listed: String?, tools: [InstalledTool]) {
         let builds = RunnerStore.installedBuilds(in: runners)
         let listed = try? String(contentsOf: file, encoding: .utf8)
         let holder = legacyHolder(builds: builds, listed: listed, runners: runners)
-        return (builds, listed, SupportedRunners.tools(for: builds, legacy: holder))
+        // On Sequoia a FEX tool stays only if an earlier install listed it.
+        var kept = Set((listed ?? "").split(separator: "\n").compactMap {
+            $0.split(separator: "\t").first.map(String.init)
+        })
+        if case .build = holder { kept.insert(SupportedRunners.legacyToolName) }
+        return (builds, listed, SupportedRunners.tools(
+            for: builds, legacy: holder, fexAvailable: fexAvailable, keeping: kept))
     }
 
     // 1.0.x used the single 'notproton' tool name and wrote no tool list, so the
@@ -144,9 +150,10 @@ enum CompatToolList {
         runners: URL = SupportPaths.runners,
         bridge: URL = SupportPaths.bridge,
         file: URL = SupportPaths.toolList,
-        compatTools: URL = SupportPaths.Steam.compatTools
+        compatTools: URL = SupportPaths.Steam.compatTools,
+        fexAvailable: Bool = CompatTool.Flavor.fexAvailable
     ) throws -> Bool {
-        let (builds, listed, tools) = resolved(runners: runners, file: file)
+        let (builds, listed, tools) = resolved(runners: runners, file: file, fexAvailable: fexAvailable)
         let text = contents(tools)
         let changed = !(listed == text || (listed == nil && text.isEmpty))
         if changed {
