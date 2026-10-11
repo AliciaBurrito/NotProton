@@ -33,20 +33,20 @@ struct NotProtonApp: App {
         CommandGroup(replacing: .newItem) {}
 
         CommandGroup(after: .appInfo) {
-            Button(L10n.tr("Check for Updates…")) { updater.check() }
+            Button("Check for Updates…") { updater.check() }
         }
 
         CommandGroup(after: .sidebar) {
-            Button(L10n.tr("Status")) { pane = .status }
+            Button("Status") { pane = .status }
                 .keyboardShortcut("1", modifiers: .command)
-            Button(L10n.tr("Prefixes")) { pane = .prefixes }
+            Button("Prefixes") { pane = .prefixes }
                 .keyboardShortcut("2", modifiers: .command)
-            Button(L10n.tr("Prefix Backups")) { pane = .backups }
+            Button("Prefix Backups") { pane = .backups }
                 .keyboardShortcut("3", modifiers: .command)
 
             Divider()
 
-            Button(L10n.tr("Refresh")) {
+            Button("Refresh") {
                 Task {
                     switch pane {
                     case .status: await status.refresh()
@@ -60,27 +60,27 @@ struct NotProtonApp: App {
             Divider()
         }
 
-        CommandMenu(L10n.tr("Setup")) {
-            Button(L10n.tr("Install")) { Task { await status.requestInstall() } }
+        CommandMenu("Setup") {
+            Button("Install") { Task { await status.requestInstall() } }
                 .keyboardShortcut("i", modifiers: .command)
                 .disabled(!status.canInstall)
 
-            Button(L10n.tr("Set Up Compatibility Tool")) { Task { await status.requestCompatibilityTool() } }
+            Button("Set Up Compatibility Tool") { Task { await status.requestCompatibilityTool() } }
                 .disabled(!status.canInstall || status.setupSource == nil)
 
-            Button(L10n.tr("Fetch Valve Binaries")) { Task { await status.fetchValveBinaries() } }
+            Button("Fetch Valve Binaries") { Task { await status.fetchValveBinaries() } }
                 .disabled(!status.canInstall)
 
             Divider()
 
             updateBlockCommand
 
-            Button(L10n.tr("Repair Steam")) { status.pendingConfirmation = .replaceSteam }
+            Button("Repair Steam") { status.pendingConfirmation = .replaceSteam }
                 .disabled(!status.isIdle)
 
             Divider()
 
-            Button(L10n.tr("Reveal Log in Finder")) {
+            Button("Reveal Log in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([AppLog.file])
             }
         }
@@ -90,8 +90,8 @@ struct NotProtonApp: App {
 
     @CommandsBuilder
     private var prefixMenu: some Commands {
-        CommandMenu(L10n.tr("Prefix")) {
-            Button(L10n.tr("Run Program…")) {
+        CommandMenu("Prefix") {
+            Button("Run Program…") {
                 if let prefix = prefixTarget { prefixes.chooseExecutable(for: prefix) }
             }
             .disabled(prefixTarget == nil)
@@ -107,7 +107,7 @@ struct NotProtonApp: App {
 
             Divider()
 
-            Button(L10n.tr("Reveal in Finder")) {
+            Button("Reveal in Finder") {
                 if let prefix = prefixes.selectedPrefix { prefixes.reveal(prefix) }
             }
             .keyboardShortcut("r", modifiers: [.command, .shift])
@@ -160,10 +160,10 @@ struct NotProtonApp: App {
     @ViewBuilder
     private var updateBlockCommand: some View {
         if status.snapshot?.updateBlocked == true {
-            Button(L10n.tr("Allow Client Updates")) { Task { await status.setUpdateBlock(false) } }
+            Button("Allow Client Updates") { Task { await status.setUpdateBlock(false) } }
                 .disabled(!status.isIdle)
         } else {
-            Button(L10n.tr("Block Client Updates")) { status.pendingConfirmation = .blockUpdates }
+            Button("Block Client Updates") { status.pendingConfirmation = .blockUpdates }
                 .disabled(!status.isIdle || status.snapshot == nil)
         }
     }

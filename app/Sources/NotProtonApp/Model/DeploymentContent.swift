@@ -60,11 +60,11 @@ enum DeploymentContent {
         let parent = app.deletingLastPathComponent().path(percentEncoded: false)
         let fd = open(parent, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else {
-            throw StepFailure(step: SteamInstaller.step, detail: L10n.tr("Could not lock the installation at \(parent): \(String(cString: strerror(errno)))."))
+            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "Could not lock the installation at \(parent): \(String(cString: strerror(errno)))."))
         }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             close(fd)
-            throw StepFailure(step: SteamInstaller.step, detail: L10n.tr("Another installation operation is changing files here. Wait for it to finish."))
+            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "Another installation operation is changing files here. Wait for it to finish."))
         }
         return fd
     }
@@ -73,7 +73,7 @@ enum DeploymentContent {
         guard FileManager.default.fileExists(atPath: file.path(percentEncoded: false)) else { return nil }
         let build = try JSONDecoder().decode(Build.self, from: Data(contentsOf: file))
         guard !build.version.isEmpty, build.builtAt > 0 else {
-            throw StepFailure(step: L10n.tr("Check installed files"), detail: L10n.tr("The installed build record is invalid."))
+            throw StepFailure(step: String(localized: "Check installed files"), detail: String(localized: "The installed build record is invalid."))
         }
         return build
     }
@@ -99,8 +99,8 @@ enum DeploymentContent {
             let deployed = try MachOBuild.hashesIgnoringSignature(of: dylib.destination),
             hashes != deployed
         {
-            throw StepFailure(step: L10n.tr("Check installed files"),
-                              detail: L10n.tr("Steam's installed dylib does not match this account's build record. Finish or repair its installation with the NotProton app that last installed it."))
+            throw StepFailure(step: String(localized: "Check installed files"),
+                              detail: String(localized: "Steam's installed dylib does not match this account's build record. Finish or repair its installation with the NotProton app that last installed it."))
         }
         return bundled.isNewer(than: installed) ? .update(differences) : .repair(differences)
     }

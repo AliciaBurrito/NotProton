@@ -17,17 +17,17 @@ enum InstallPhase: Sendable {
 
     var label: String {
         switch self {
-        case .checkingPayload: L10n.tr("Preparing")
-        case .stagingBridge: L10n.tr("Staging components")
-        case .preflight: L10n.tr("Checking Steam")
-        case .stoppingClient: L10n.tr("Stopping Steam")
-        case .copyingDylib: L10n.tr("Installing")
-        case .installingSignatures: L10n.tr("Installing signatures")
-        case .installingOverlayShim: L10n.tr("Installing components")
-        case .settingInsert: L10n.tr("Configuring Steam")
-        case .signing: L10n.tr("Signing")
-        case .registering: L10n.tr("Finishing up")
-        case .finished: L10n.tr("Done")
+        case .checkingPayload: String(localized: "Preparing")
+        case .stagingBridge: String(localized: "Staging components")
+        case .preflight: String(localized: "Checking Steam")
+        case .stoppingClient: String(localized: "Stopping Steam")
+        case .copyingDylib: String(localized: "Installing")
+        case .installingSignatures: String(localized: "Installing signatures")
+        case .installingOverlayShim: String(localized: "Installing components")
+        case .settingInsert: String(localized: "Configuring Steam")
+        case .signing: String(localized: "Signing")
+        case .registering: String(localized: "Finishing up")
+        case .finished: String(localized: "Done")
         }
     }
 }
@@ -42,7 +42,7 @@ struct InstallOutcome: Sendable {
 }
 
 enum SteamInstaller {
-    static let step = L10n.tr("Install NotProton")
+    static let step = String(localized: "Install NotProton")
 
     typealias ClientStopper = @Sendable (URL, () -> Void) throws -> Bool
     typealias BundleRegistrar = @Sendable (URL) -> Void
@@ -89,7 +89,7 @@ enum SteamInstaller {
         let installationLock = holdingInstallationLock ? -1 : try DeploymentContent.acquireInstallationLock(for: app)
         defer { if installationLock >= 0 { FileLock.release(installationLock) } }
         guard let dylibHashes = try MachOBuild.hashesIgnoringSignature(of: payload.dylib) else {
-            throw StepFailure(step: step, detail: L10n.tr("The bundled NotProton dylib is invalid."))
+            throw StepFailure(step: step, detail: String(localized: "The bundled NotProton dylib is invalid."))
         }
         let build = DeploymentContent.Build(version: version, builtAt: payload.builtAt,
                                             dylibHashes: dylibHashes)
@@ -105,11 +105,11 @@ enum SteamInstaller {
         let content = try DeploymentContent.inspect(files: files, bundled: build, installed: previousBuild,
                                                    legacyVersion: SteamBundle.deployedVersion(at: deployedVersion))
         guard content != .newerInstalled else {
-            throw StepFailure(step: step, detail: L10n.tr("A newer NotProton build is installed. Use that build to update or repair the installed files."))
+            throw StepFailure(step: step, detail: String(localized: "A newer NotProton build is installed. Use that build to update or repair the installed files."))
         }
         func refuseRunningRunners() throws {
             for id in RunnerStore.clonedBuilds(in: runners) where runnerIsRunning(SupportPaths.runnerRoot(forBuild: id, runners: runners)) {
-                throw StepFailure(step: step, detail: L10n.tr("A game or Wine tool is running on build \(id). Quit it before updating NotProton."))
+                throw StepFailure(step: step, detail: String(localized: "A game or Wine tool is running on build \(id). Quit it before updating NotProton."))
             }
         }
         try refuseRunningRunners()
@@ -183,13 +183,13 @@ enum SteamInstaller {
             AppLog.note("install: bundle declares \(landed ?? "no insert")")
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("Steam is set up to inject a different dylib. Please repair Steam before installing NotProton.")
+                detail: String(localized: "Steam is set up to inject a different dylib. Please repair Steam before installing NotProton.")
             )
         }
 
         let remaining = try files.filter { try !$0.matches() }.map(\.name)
         guard remaining.isEmpty else {
-            throw StepFailure(step: step, detail: L10n.tr("These files did not update: \(remaining.joined(separator: ", "))."))
+            throw StepFailure(step: step, detail: String(localized: "These files did not update: \(remaining.joined(separator: ", "))."))
         }
 
         report(.finished)
@@ -210,7 +210,7 @@ enum SteamInstaller {
     ) throws {
         guard isCurrent(outcome.version) else {
             throw StepFailure(step: step,
-                              detail: L10n.tr("Installed content could not be verified. Refresh the Status view for the files that still need attention."))
+                              detail: String(localized: "Installed content could not be verified. Refresh the Status view for the files that still need attention."))
         }
         try write(outcome.version, to: deployedVersion)
         try atomicReplace(DeploymentContent.record(beside: deployedVersion),
@@ -243,7 +243,7 @@ enum SteamInstaller {
         guard FileManager.default.fileExists(atPath: app.path(percentEncoded: false)) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(app.path(percentEncoded: false)) is not there, so there is nothing to install into.")
+                detail: String(localized: "\(app.path(percentEncoded: false)) is not there, so there is nothing to install into.")
             )
         }
     }
@@ -256,7 +256,7 @@ enum SteamInstaller {
         guard foreign.isEmpty else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("Another dylib is present. Repair your Steam install before installing NotProton.")
+                detail: String(localized: "Another dylib is present. Repair your Steam install before installing NotProton.")
             )
         }
     }
@@ -282,10 +282,10 @@ enum SteamInstaller {
     }
 
     private static let mismatchAcrossAccounts =
-        L10n.tr("Steam has a different copy of NotProton, installed by another account on this Mac. Update NotProton from that account, then try again.")
+        String(localized: "Steam has a different copy of NotProton, installed by another account on this Mac. Update NotProton from that account, then try again.")
 
     private static let unpatchedAcrossAccounts =
-        L10n.tr("Steam has not been set up for NotProton, and this account cannot change it. Install from the account that owns Steam.")
+        String(localized: "Steam has not been set up for NotProton, and this account cannot change it. Install from the account that owns Steam.")
 
     static func assertBundleIsWritable(_ app: URL) throws {
         let directory = app.appending(path: "Contents/MacOS")
@@ -298,7 +298,7 @@ enum SteamInstaller {
         } catch {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(directory.path(percentEncoded: false)) could not be written. ")
+                detail: String(localized: "\(directory.path(percentEncoded: false)) could not be written. ")
                     + error.localizedDescription
             )
         }
@@ -338,7 +338,7 @@ enum SteamInstaller {
         guard var dict = SteamBundle.readInfoPlist(at: plist) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(plist.path(percentEncoded: false)) could not be read as a property list.")
+                detail: String(localized: "\(plist.path(percentEncoded: false)) could not be read as a property list.")
             )
         }
 
@@ -360,7 +360,7 @@ enum SteamInstaller {
         guard result.succeeded else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(path) could not be signed. ")
+                detail: String(localized: "\(path) could not be signed. ")
                     + result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }

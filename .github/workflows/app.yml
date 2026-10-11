@@ -105,6 +105,9 @@ jobs:
       - name: Check the minimum macOS version
         run: make -s mincheck
 
+      - name: Check the translations
+        run: make -s l10ncheck
+
       - name: Run the hermetic C suites
         run: |
           make -s sigcheck

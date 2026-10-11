@@ -12,9 +12,9 @@ enum WineTool: String, CaseIterable, Sendable {
 
     var label: String {
         switch self {
-        case .winecfg: L10n.tr("Wine Configuration")
-        case .regedit: L10n.tr("Registry Editor")
-        case .taskmgr: L10n.tr("Task Manager")
+        case .winecfg: String(localized: "Wine Configuration")
+        case .regedit: String(localized: "Registry Editor")
+        case .taskmgr: String(localized: "Task Manager")
         }
     }
 }
@@ -55,12 +55,12 @@ enum PrefixTools {
                 return PrefixBuildRecord(build: build, display: nil)
             }
         }
-        return PrefixBuildRecord(build: "", display: L10n.tr("another version of CrossOver"))
+        return PrefixBuildRecord(build: "", display: String(localized: "another version of CrossOver"))
     }
 
     static func writeBuildRecord(_ tool: InstalledTool, for prefix: WinePrefix) throws {
         let file = prefix.root.appending(path: buildRecordName)
-        try atomicReplace(file, with: Data("\(tool.build)\n\(tool.display)\n".utf8), step: L10n.tr("Record prefix build"))
+        try atomicReplace(file, with: Data("\(tool.build)\n\(tool.display)\n".utf8), step: String(localized: "Record prefix build"))
     }
 
     static func tool(
@@ -88,10 +88,10 @@ enum PrefixTools {
         if let record = lastBuild(of: prefix) {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(prefix.title) was last run by \(record.display ?? "build \(record.build)"), which is no longer set up. Rebuild the prefix first.")
+                detail: String(localized: "\(prefix.title) was last run by \(record.display ?? "build \(record.build)"), which is no longer set up. Rebuild the prefix first.")
             )
         }
-        throw StepFailure(step: step, detail: L10n.tr("No compatibility tool is set up."))
+        throw StepFailure(step: step, detail: String(localized: "No compatibility tool is set up."))
     }
 
     static func syncBackend(prefix: WinePrefix) -> String {
@@ -159,20 +159,20 @@ enum PrefixTools {
         guard FileManager.default.isExecutableFile(atPath: loader.path(percentEncoded: false)) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("No compatibility tool at \(loader.path(percentEncoded: false)). Use Set Up Compatibility Tool first.")
+                detail: String(localized: "No compatibility tool at \(loader.path(percentEncoded: false)). Use Set Up Compatibility Tool first.")
             )
         }
         guard FileManager.default.fileExists(atPath: prefix.pfx.path(percentEncoded: false)) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(prefix.title) has no prefix at \(prefix.pfx.path(percentEncoded: false)).")
+                detail: String(localized: "\(prefix.title) has no prefix at \(prefix.pfx.path(percentEncoded: false)).")
             )
         }
         return loader
     }
 
     static func launch(_ tool: WineTool, in prefix: WinePrefix) throws {
-        let chosen = try resolvedTool(step: L10n.tr("Open \(tool.label)"), for: prefix)
+        let chosen = try resolvedTool(step: String(localized: "Open \(tool.label)"), for: prefix)
         try launch(
             tool, in: prefix, runner: SupportPaths.clonedRoot(forBuild: chosen.build),
             flavor: chosen.tool.flavor
@@ -183,7 +183,7 @@ enum PrefixTools {
         _ tool: WineTool, in prefix: WinePrefix, runner: URL, flavor: CompatTool.Flavor = .fex
     ) throws {
         let loader = try readyLoader(
-            step: L10n.tr("Open \(tool.label)"), prefix: prefix, runner: runner, flavor: flavor
+            step: String(localized: "Open \(tool.label)"), prefix: prefix, runner: runner, flavor: flavor
         )
         try Shell.detach(
             loader.path(percentEncoded: false),
@@ -193,7 +193,7 @@ enum PrefixTools {
     }
 
     static func run(_ executable: URL, in prefix: WinePrefix) throws {
-        let chosen = try resolvedTool(step: L10n.tr("Run \(executable.lastPathComponent)"), for: prefix)
+        let chosen = try resolvedTool(step: String(localized: "Run \(executable.lastPathComponent)"), for: prefix)
         try run(
             executable, in: prefix, runner: SupportPaths.clonedRoot(forBuild: chosen.build),
             flavor: chosen.tool.flavor
@@ -206,15 +206,15 @@ enum PrefixTools {
         runner: URL,
         flavor: CompatTool.Flavor = .fex
     ) throws {
-        let step = L10n.tr("Run \(executable.lastPathComponent)")
+        let step = String(localized: "Run \(executable.lastPathComponent)")
         let loader = try readyLoader(step: step, prefix: prefix, runner: runner, flavor: flavor)
         guard FileManager.default.fileExists(atPath: executable.path(percentEncoded: false)) else {
-            throw StepFailure(step: step, detail: L10n.tr("No file at \(executable.path(percentEncoded: false))."))
+            throw StepFailure(step: step, detail: String(localized: "No file at \(executable.path(percentEncoded: false))."))
         }
         guard let arguments = arguments(for: executable) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(executable.lastPathComponent) is not a Windows program. Pick an exe, msi, bat or cmd file.")
+                detail: String(localized: "\(executable.lastPathComponent) is not a Windows program. Pick an exe, msi, bat or cmd file.")
             )
         }
 
@@ -262,8 +262,8 @@ enum PrefixTools {
     static func delete(_ prefix: WinePrefix) throws {
         guard !PrefixStore.isInUse(prefix) else {
             throw StepFailure(
-                step: L10n.tr("Delete prefix"),
-                detail: L10n.tr("\(prefix.title) is running. Quit the game first.")
+                step: String(localized: "Delete prefix"),
+                detail: String(localized: "\(prefix.title) is running. Quit the game first.")
             )
         }
         try WriteRefused.catching(prefix.root) {

@@ -5,7 +5,7 @@ import Foundation
 
 enum RunnerInstaller {
 
-    static let step = L10n.tr("Clone CrossOver")
+    static let step = String(localized: "Clone CrossOver")
 
     static func clone(
         from install: CrossOverInstall,
@@ -15,7 +15,7 @@ enum RunnerInstaller {
         guard case .supported(let build) = install.support else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(install.name) is not a supported build. Supported: \(SupportedRunners.versionList).")
+                detail: String(localized: "\(install.name) is not a supported build. Supported: \(SupportedRunners.versionList).")
             )
         }
 
@@ -42,7 +42,7 @@ enum RunnerInstaller {
         return build
     }
 
-    static let removeStep = L10n.tr("Remove build")
+    static let removeStep = String(localized: "Remove build")
 
     @discardableResult
     static func removeClone(
@@ -58,12 +58,12 @@ enum RunnerInstaller {
         let path = target.path(percentEncoded: false)
 
         guard FileManager.default.fileExists(atPath: path) else {
-            throw StepFailure(step: removeStep, detail: L10n.tr("Build \(build) is not set up."))
+            throw StepFailure(step: removeStep, detail: String(localized: "Build \(build) is not set up."))
         }
         guard !running(target) else {
             throw StepFailure(
                 step: removeStep,
-                detail: L10n.tr("A game or Wine tool is still running on build \(build). Quit it first.")
+                detail: String(localized: "A game or Wine tool is still running on build \(build). Quit it first.")
             )
         }
 
@@ -158,7 +158,7 @@ enum RunnerInstaller {
                     } catch {
                         failures.append(StepFailure(
                             step: removeStep,
-                            detail: L10n.tr("Could not remove prefix template \(folder.appending(path: name).path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry.")
+                            detail: String(localized: "Could not remove prefix template \(folder.appending(path: name).path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry.")
                         ))
                     }
                 }
@@ -168,7 +168,7 @@ enum RunnerInstaller {
             } catch {
                 failures.append(StepFailure(
                     step: removeStep,
-                    detail: L10n.tr("Could not clean prefix templates at \(folder.path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry.")
+                    detail: String(localized: "Could not clean prefix templates at \(folder.path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry.")
                 ))
             }
         }
@@ -258,7 +258,7 @@ enum RunnerInstaller {
         guard copied.status == 0 else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("Copying \(source) failed. \(copied.stderr.trimmingCharacters(in: .whitespacesAndNewlines))")
+                detail: String(localized: "Copying \(source) failed. \(copied.stderr.trimmingCharacters(in: .whitespacesAndNewlines))")
             )
         }
         scrubDownloadMarkers(at: landing)
@@ -273,12 +273,12 @@ enum RunnerInstaller {
     static func verifyClone(build: RunnerBuild, root: URL) throws {
         let loader = Clean.copy(of: CrossOverSource.unixLoader(inRoot: root))
         guard let hash = Digest.sha256IfPresent(loader) else {
-            throw StepFailure(step: step, detail: L10n.tr("The clone has no Wine loader at \(loader.lastPathComponent)."))
+            throw StepFailure(step: step, detail: String(localized: "The clone has no Wine loader at \(loader.lastPathComponent)."))
         }
         guard hash == build.loaderSHA256 else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The cloned Wine loader at \(loader.lastPathComponent) does not match build \(build.id). Expected \(build.loaderSHA256.prefix(16)), found \(hash.prefix(16)).")
+                detail: String(localized: "The cloned Wine loader at \(loader.lastPathComponent) does not match build \(build.id). Expected \(build.loaderSHA256.prefix(16)), found \(hash.prefix(16)).")
             )
         }
 

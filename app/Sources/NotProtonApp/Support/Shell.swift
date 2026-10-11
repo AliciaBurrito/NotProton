@@ -25,8 +25,8 @@ struct CommandFailure: LocalizedError {
 
     var errorDescription: String? {
         let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        if detail.isEmpty { return L10n.tr("\(command) failed with status \(status).") }
-        return L10n.tr("\(command) failed with status \(status): \(detail)")
+        if detail.isEmpty { return String(localized: "\(command) failed with status \(status).") }
+        return String(localized: "\(command) failed with status \(status): \(detail)")
     }
 }
 
@@ -100,7 +100,7 @@ enum Shell {
                 command: (executable as NSString).lastPathComponent,
                 status: result.status,
                 stderr: reason.isEmpty && result.outputLost
-                    ? L10n.tr("Its output was still open when it exited, so none was captured.")
+                    ? String(localized: "Its output was still open when it exited, so none was captured.")
                     : reason
             )
         }

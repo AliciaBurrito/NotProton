@@ -40,7 +40,7 @@ struct NtdllPatch: Sendable {
 
 enum NtdllPatcher {
 
-    static let step = L10n.tr("Patch ntdll")
+    static let step = String(localized: "Patch ntdll")
 
     private static let magicPE32Plus: UInt16 = 0x20b
     // SECTION_NAME, SECTION_SIZE and SECTION_FLAGS in resolve.py. The patched file is checked
@@ -277,7 +277,7 @@ enum NtdllPatcher {
         guard intoCave >= 0 else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) detour goes to \(hex(patch.payloadRVA)), below its cave at \(hex(patch.caveRVA)), so writing it would land in live code.")
+                detail: String(localized: "The \(patch.arch.rawValue) detour goes to \(hex(patch.payloadRVA)), below its cave at \(hex(patch.caveRVA)), so writing it would land in live code.")
             )
         }
 
@@ -285,28 +285,28 @@ enum NtdllPatcher {
         if payload.count > room {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) detour is \(payload.count) bytes and the cave holds \(room), so writing it would overrun into live code.")
+                detail: String(localized: "The \(patch.arch.rawValue) detour is \(payload.count) bytes and the cave holds \(room), so writing it would overrun into live code.")
             )
         }
 
-        try requireRange(caveOffset, patch.caveSize, in: bytes, describing: L10n.tr("The cave"))
+        try requireRange(caveOffset, patch.caveSize, in: bytes, describing: String(localized: "The cave"))
         guard bytes[caveOffset ..< caveOffset + patch.caveSize].allSatisfy({ $0 == patch.cavePad }) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) cave at \(hex(patch.caveRVA)) is not empty. This ntdll is either already patched or not the build its hash claimed.")
+                detail: String(localized: "The \(patch.arch.rawValue) cave at \(hex(patch.caveRVA)) is not empty. This ntdll is either already patched or not the build its hash claimed.")
             )
         }
 
         // check files
         var branches: [(offset: Int, code: [UInt8])] = []
         for hook in patch.hooks {
-            let offset = try fileOffset(of: hook.rva, in: bytes, describing: L10n.tr("hook site"), patch: patch)
-            try requireRange(offset, hook.stolen.count, in: bytes, describing: L10n.tr("The hook site"))
+            let offset = try fileOffset(of: hook.rva, in: bytes, describing: String(localized: "hook site"), patch: patch)
+            try requireRange(offset, hook.stolen.count, in: bytes, describing: String(localized: "The hook site"))
             let present = Array(bytes[offset ..< offset + hook.stolen.count])
             guard present == hook.stolen else {
                 throw StepFailure(
                     step: step,
-                    detail: L10n.tr("The \(patch.arch.rawValue) hook site at \(hex(hook.rva)) holds \(hex(present)) instead of \(hex(hook.stolen)), so the offsets do not belong to this ntdll.")
+                    detail: String(localized: "The \(patch.arch.rawValue) hook site at \(hex(hook.rva)) holds \(hex(present)) instead of \(hex(hook.stolen)), so the offsets do not belong to this ntdll.")
                 )
             }
             branches.append(
@@ -331,7 +331,7 @@ enum NtdllPatcher {
     private static func branchLink(from hookRVA: Int, to payloadRVA: Int, filling width: Int) throws -> [UInt8] {
         guard width == 4 else {
             throw StepFailure(
-                step: step, detail: L10n.tr("A hook site of \(width) bytes cannot hold a branch and link.")
+                step: step, detail: String(localized: "A hook site of \(width) bytes cannot hold a branch and link.")
             )
         }
 
@@ -339,7 +339,7 @@ enum NtdllPatcher {
         guard delta % 4 == 0, (-0x800_0000 ..< 0x800_0000).contains(delta) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The detour is \(delta) bytes from the hook site, which a branch and link cannot reach.")
+                detail: String(localized: "The detour is \(delta) bytes from the hook site, which a branch and link cannot reach.")
             )
         }
 
@@ -351,7 +351,7 @@ enum NtdllPatcher {
     private static func relativeJump(from hookRVA: Int, to caveRVA: Int, filling width: Int) throws -> [UInt8] {
         guard width >= 5 else {
             throw StepFailure(
-                step: step, detail: L10n.tr("A hook site of \(width) bytes cannot hold a relative jump.")
+                step: step, detail: String(localized: "A hook site of \(width) bytes cannot hold a relative jump.")
             )
         }
 
@@ -359,7 +359,7 @@ enum NtdllPatcher {
         guard let displacement = Int32(exactly: delta) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The cave is \(delta) bytes from the hook site, which a relative jump cannot reach.")
+                detail: String(localized: "The cave is \(delta) bytes from the hook site, which a relative jump cannot reach.")
             )
         }
 
@@ -383,19 +383,19 @@ enum NtdllPatcher {
         guard patch.caveSize == sectionSize, imageSize == patch.caveRVA else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll image ends at \(hex(imageSize)), and the detour section was pinned at \(hex(patch.caveRVA)).")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll image ends at \(hex(imageSize)), and the detour section was pinned at \(hex(patch.caveRVA)).")
             )
         }
         guard header + 40 <= headersSize, bytes[header ..< header + 40].allSatisfy({ $0 == 0 }) else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll has no free section header slot for the detour.")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll has no free section header slot for the detour.")
             )
         }
         guard fileAlignment > 0, fileAlignment & (fileAlignment - 1) == 0 else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll file alignment \(hex(fileAlignment)) is not a power of two.")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll file alignment \(hex(fileAlignment)) is not a power of two.")
             )
         }
 
@@ -426,7 +426,7 @@ enum NtdllPatcher {
         let pe = Int(try u32(bytes, 0x3c))
         guard try u32(bytes, pe) == 0x0000_4550 else {
             throw StepFailure(
-                step: step, detail: L10n.tr("The \(patch.arch.rawValue) ntdll has no PE header where its DOS stub points.")
+                step: step, detail: String(localized: "The \(patch.arch.rawValue) ntdll has no PE header where its DOS stub points.")
             )
         }
 
@@ -434,7 +434,7 @@ enum NtdllPatcher {
         guard machine == patch.machine else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll is machine \(hex(Int(machine))), expected \(hex(Int(patch.machine))).")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll is machine \(hex(Int(machine))), expected \(hex(Int(patch.machine))).")
             )
         }
 
@@ -442,7 +442,7 @@ enum NtdllPatcher {
         guard magic == patch.magic else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll optional header is \(hex(Int(magic))), expected \(hex(Int(patch.magic))).")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll optional header is \(hex(Int(magic))), expected \(hex(Int(patch.magic))).")
             )
         }
 
@@ -452,7 +452,7 @@ enum NtdllPatcher {
         guard imageBase == patch.imageBase else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll is based at \(hex(imageBase)), and the detour was linked against \(hex(patch.imageBase)).")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll is based at \(hex(imageBase)), and the detour was linked against \(hex(patch.imageBase)).")
             )
         }
     }
@@ -478,13 +478,13 @@ enum NtdllPatcher {
             guard rva >= virtualAddress, rva < virtualAddress + span else { continue }
 
             let offset = rawOffset + (rva - virtualAddress)
-            try requireRange(offset, 1, in: bytes, describing: L10n.tr("The \(what)"))
+            try requireRange(offset, 1, in: bytes, describing: String(localized: "The \(what)"))
             return offset
         }
 
         throw StepFailure(
             step: step,
-            detail: L10n.tr("RVA \(hex(rva)) falls in no mapped section of the \(patch.arch.rawValue) ntdll, so the \(what) cannot be located.")
+            detail: String(localized: "RVA \(hex(rva)) falls in no mapped section of the \(patch.arch.rawValue) ntdll, so the \(what) cannot be located.")
         )
     }
 
@@ -494,25 +494,25 @@ enum NtdllPatcher {
         guard offset >= 0, length >= 0, offset <= bytes.count - length else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(what) at \(hex(offset)) spans \(length) bytes, past the end of a \(bytes.count) byte file.")
+                detail: String(localized: "\(what) at \(hex(offset)) spans \(length) bytes, past the end of a \(bytes.count) byte file.")
             )
         }
     }
 
     private static func u16(_ bytes: [UInt8], _ offset: Int) throws -> UInt16 {
-        try requireRange(offset, 2, in: bytes, describing: L10n.tr("A header field"))
+        try requireRange(offset, 2, in: bytes, describing: String(localized: "A header field"))
         return UInt16(bytes[offset]) | UInt16(bytes[offset + 1]) << 8
     }
 
     private static func u32(_ bytes: [UInt8], _ offset: Int) throws -> UInt32 {
-        try requireRange(offset, 4, in: bytes, describing: L10n.tr("A header field"))
+        try requireRange(offset, 4, in: bytes, describing: String(localized: "A header field"))
         var value: UInt32 = 0
         for index in (0 ..< 4).reversed() { value = value << 8 | UInt32(bytes[offset + index]) }
         return value
     }
 
     private static func u64(_ bytes: [UInt8], _ offset: Int) throws -> UInt64 {
-        try requireRange(offset, 8, in: bytes, describing: L10n.tr("A header field"))
+        try requireRange(offset, 8, in: bytes, describing: String(localized: "A header field"))
         var value: UInt64 = 0
         for index in (0 ..< 8).reversed() { value = value << 8 | UInt64(bytes[offset + index]) }
         return value
@@ -530,7 +530,7 @@ enum NtdllPatcher {
         guard let url = Bundle.module.url(forResource: patch.payloadResource, withExtension: "bin") else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(patch.payloadResource).bin is missing from the app's resources.")
+                detail: String(localized: "\(patch.payloadResource).bin is missing from the app's resources.")
             )
         }
 
@@ -540,7 +540,7 @@ enum NtdllPatcher {
         } catch {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(patch.payloadResource).bin could not be read. \(error.localizedDescription)")
+                detail: String(localized: "\(patch.payloadResource).bin could not be read. \(error.localizedDescription)")
             )
         }
 
@@ -548,7 +548,7 @@ enum NtdllPatcher {
         guard hash == patch.payloadSHA256 else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(patch.payloadResource).bin hashes \(hash.prefix(16)) and should hash \(patch.payloadSHA256.prefix(16)), so the shipped detour is not the one that was built.")
+                detail: String(localized: "\(patch.payloadResource).bin hashes \(hash.prefix(16)) and should hash \(patch.payloadSHA256.prefix(16)), so the shipped detour is not the one that was built.")
             )
         }
         return data
@@ -567,19 +567,19 @@ enum NtdllPatcher {
         else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("Build \(build.bundleVersion) records no \(patch.arch.rawValue) ntdll hashes.")
+                detail: String(localized: "Build \(build.bundleVersion) records no \(patch.arch.rawValue) ntdll hashes.")
             )
         }
 
         guard let inputHash = Digest.sha256IfPresent(source) else {
             throw StepFailure(
-                step: step, detail: L10n.tr("There is no ntdll to patch at \(source.path(percentEncoded: false)).")
+                step: step, detail: String(localized: "There is no ntdll to patch at \(source.path(percentEncoded: false)).")
             )
         }
         guard inputHash == expectedInput else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The \(patch.arch.rawValue) ntdll at \(source.path(percentEncoded: false)) hashes \(inputHash.prefix(16)) and build \(build.bundleVersion) expects \(expectedInput.prefix(16)). It is already patched, or from another CrossOver build.")
+                detail: String(localized: "The \(patch.arch.rawValue) ntdll at \(source.path(percentEncoded: false)) hashes \(inputHash.prefix(16)) and build \(build.bundleVersion) expects \(expectedInput.prefix(16)). It is already patched, or from another CrossOver build.")
             )
         }
 
@@ -589,7 +589,7 @@ enum NtdllPatcher {
         } catch {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("\(source.path(percentEncoded: false)) could not be read. \(error.localizedDescription)")
+                detail: String(localized: "\(source.path(percentEncoded: false)) could not be read. \(error.localizedDescription)")
             )
         }
 
@@ -599,7 +599,7 @@ enum NtdllPatcher {
         guard outputHash == expectedOutput else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("The patched \(patch.arch.rawValue) ntdll hashes \(outputHash.prefix(16)) and build \(build.bundleVersion) expects \(expectedOutput.prefix(16)). Nothing was written.")
+                detail: String(localized: "The patched \(patch.arch.rawValue) ntdll hashes \(outputHash.prefix(16)) and build \(build.bundleVersion) expects \(expectedOutput.prefix(16)). Nothing was written.")
             )
         }
 

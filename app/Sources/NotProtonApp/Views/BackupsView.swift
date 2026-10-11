@@ -8,11 +8,11 @@ struct BackupsView: View {
     var body: some View {
         Group {
             if !model.hasLoaded {
-                ProgressView(L10n.tr("Looking for backups"))
+                ProgressView("Looking for backups")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.backups.isEmpty {
                 ContentUnavailableView(
-                    L10n.tr("No Backups"),
+                    String(localized: "No Backups"),
                     systemImage: "externaldrive.badge.timemachine"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -20,13 +20,13 @@ struct BackupsView: View {
                 table
             }
         }
-        .navigationTitle(L10n.tr("Prefix Backups"))
+        .navigationTitle("Prefix Backups")
         .navigationSubtitle(summary)
         .safeAreaInset(edge: .bottom) {
             if let failed = model.report {
                 report(
                     StatusRow(
-                        title: L10n.tr("Failed"),
+                        title: String(localized: "Failed"),
                         value: failed.message,
                         tone: .bad,
                         action: failed.settingsPane.map { pane in
@@ -35,7 +35,7 @@ struct BackupsView: View {
                     )
                 )
             } else if let outcome = model.outcome {
-                report(StatusRow(title: L10n.tr("Done"), value: outcome, tone: .ok))
+                report(StatusRow(title: String(localized: "Done"), value: outcome, tone: .ok))
             }
         }
         .toolbar {
@@ -60,7 +60,7 @@ struct BackupsView: View {
                 model.pendingConfirmation = nil
                 Task { await model.deleteBackups(targets) }
             }
-            Button(L10n.tr("Cancel"), role: .cancel) { model.pendingConfirmation = nil }
+            Button("Cancel", role: .cancel) { model.pendingConfirmation = nil }
                 .keyboardShortcut(.defaultAction)
         } message: {
             Text(PrefixPrompt.deleteBackupsMessage(clearing))
@@ -70,8 +70,8 @@ struct BackupsView: View {
     private var summary: String {
         guard !model.backups.isEmpty else { return "" }
         let size = model.backupBytes.formatted(.byteCount(style: .file))
-        let count = model.backups.count == 1 ? L10n.tr("1 backup") : L10n.tr("\(model.backups.count) backups")
-        return L10n.tr("\(count), \(size) private size")
+        let count = model.backups.count == 1 ? String(localized: "1 backup") : String(localized: "\(model.backups.count) backups")
+        return String(localized: "\(count), \(size) private size")
     }
 
     private var selected: [PrefixBackup] {
@@ -99,29 +99,29 @@ struct BackupsView: View {
 
     @ViewBuilder
     private var strip: some View {
-        Button(L10n.tr("Reveal in Finder"), systemImage: "folder") {
+        Button("Reveal in Finder", systemImage: "folder") {
             if let backup = selected.first, selected.count == 1 { model.reveal(backup) }
         }
         .disabled(selected.count != 1)
-        .help(L10n.tr("Show the selected backup in the Finder."))
+        .help("Show the selected backup in the Finder.")
 
-        Button(L10n.tr("Delete"), systemImage: "trash") {
+        Button("Delete", systemImage: "trash") {
             ask(selected)
         }
         .disabled(selected.isEmpty || model.isLoading)
-        .help(L10n.tr("Delete the selected backups."))
+        .help("Delete the selected backups.")
 
-        Button(L10n.tr("Delete All"), systemImage: "externaldrive.badge.minus") {
+        Button("Delete All", systemImage: "externaldrive.badge.minus") {
             ask(model.backups)
         }
         .disabled(model.backups.isEmpty || model.isLoading)
-        .help(L10n.tr("Delete every backup that rebuilds have kept."))
+        .help("Delete every backup that rebuilds have kept.")
 
-        Button(L10n.tr("Refresh"), systemImage: "arrow.clockwise") {
+        Button("Refresh", systemImage: "arrow.clockwise") {
             Task { await model.load() }
         }
         .disabled(model.isLoading)
-        .help(L10n.tr("List the backups again and update their sizes."))
+        .help("List the backups again and update their sizes.")
     }
 
     private var gameWidth: CGFloat {
@@ -138,31 +138,31 @@ struct BackupsView: View {
 
     private var table: some View {
         Table(model.backups, selection: $selection) {
-            TableColumn(L10n.tr("Game")) { backup in
+            TableColumn("Game") { backup in
                 Text(backup.title).help(backup.title)
             }
             .width(min: 60, ideal: gameWidth)
 
-            TableColumn(L10n.tr("App ID")) { backup in
+            TableColumn("App ID") { backup in
                 Text(backup.prefix.appID).monospacedDigit().foregroundStyle(.secondary)
             }
             .width(min: 50, ideal: 80)
 
-            TableColumn(L10n.tr("Library")) { backup in
+            TableColumn("Library") { backup in
                 Text(backup.prefix.library.displayName)
                     .foregroundStyle(.secondary)
                     .help(backup.prefix.library.displayName)
             }
             .width(min: 44, ideal: libraryWidth)
 
-            TableColumn(L10n.tr("Private Size")) { backup in
+            TableColumn("Private Size") { backup in
                 Text(backup.bytes.formatted(.byteCount(style: .file)))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
             .width(min: 56, ideal: 90)
 
-            TableColumn(L10n.tr("Backed up")) { backup in
+            TableColumn("Backed up") { backup in
                 Text(taken(backup))
                     .foregroundStyle(.secondary)
                     .help(taken(backup))
@@ -182,7 +182,7 @@ struct BackupsView: View {
         let targets = model.backups.filter { ids.contains($0.id) }
         Group {
             if targets.count == 1, let backup = targets.first {
-                Button(L10n.tr("Reveal in Finder")) { model.reveal(backup) }
+                Button("Reveal in Finder") { model.reveal(backup) }
                 Divider()
             }
             if !targets.isEmpty {
@@ -195,7 +195,7 @@ struct BackupsView: View {
     }
 
     private func taken(_ backup: PrefixBackup) -> String {
-        guard let taken = backup.taken else { return L10n.tr("Unknown") }
+        guard let taken = backup.taken else { return String(localized: "Unknown") }
         return taken.formatted(date: .abbreviated, time: .shortened)
     }
 

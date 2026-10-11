@@ -101,7 +101,7 @@ enum SteamBundle {
         guard !isRunning else {
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("Steam is running, please close Steam.")
+                detail: String(localized: "Steam is running, please close Steam.")
             )
         }
 

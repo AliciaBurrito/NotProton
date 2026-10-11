@@ -14,10 +14,10 @@ enum ValveFetcher {
         var label: String {
             switch self {
             case .downloading(let progress): progress.label
-            case .extracting: L10n.tr("Extracting")
-            case .verifying: L10n.tr("Verifying")
-            case .installing: L10n.tr("Installing")
-            case .finished: L10n.tr("Done")
+            case .extracting: String(localized: "Extracting")
+            case .verifying: String(localized: "Verifying")
+            case .installing: String(localized: "Installing")
+            case .finished: String(localized: "Done")
             }
         }
     }
@@ -29,7 +29,7 @@ enum ValveFetcher {
         var wroteNothing: Bool { installed.isEmpty }
     }
 
-    private static let step = L10n.tr("Fetch the Valve binaries")
+    private static let step = String(localized: "Fetch the Valve binaries")
 
     static func run(
         manifest suppliedManifest: ValvePackageManifest? = nil,
@@ -58,7 +58,7 @@ enum ValveFetcher {
             AppLog.note("valve fetch: \(wrong.count) of \(manifest.files.count) files missed their pinned hash: \(wrong.map(\.bridgePath).joined(separator: ", "))")
             throw StepFailure(
                 step: step,
-                detail: L10n.tr("Something is wrong with the downloaded files. Please check for a NotProton update.")
+                detail: String(localized: "Something is wrong with the downloaded files. Please check for a NotProton update.")
             )
         }
 
