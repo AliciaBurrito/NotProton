@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -18,7 +19,8 @@ for path in sorted(intermediates.rglob("*.stringsdata")):
 if not datas:
     sys.exit(f"l10ncheck: no .stringsdata under {intermediates}, build the app first")
 
-before = json.loads(catalog.read_text())["strings"]
+original = catalog.read_text()
+before = json.loads(original)["strings"]
 with tempfile.TemporaryDirectory() as tmp:
     synced = pathlib.Path(tmp) / catalog.name
     shutil.copyfile(catalog, synced)
@@ -39,6 +41,10 @@ for key, entry in sorted(after.items()):
             unit = localizations.get(language, {}).get("stringUnit", {})
             if unit.get("state") != "translated" and "variations" not in localizations.get(language, {}):
                 problems.append(f"no {language} translation: {key!r}")
+formatted = json.dumps(json.loads(original), ensure_ascii=False, indent=2, separators=(",", " : "), sort_keys=True)
+formatted = re.sub(r"^( *)(.*) : \{\}", lambda m: f"{m[1]}{m[2]} : {{\n\n{m[1]}}}", formatted, flags=re.M)
+if formatted != original:
+    problems.append("not in the format xcstringstool writes, so its next sync would rewrite every line")
 
 if problems:
     print(f"l10ncheck: {len(problems)} problem(s) in {catalog}", file=sys.stderr)
