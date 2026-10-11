@@ -1013,6 +1013,20 @@ install_legacycompat() {
   done
 }
 
+# Steam on Linux symlinks this for every compat tool launch. Is needed for some legacy games.
+link_legacy_steam_dll() {
+  src="$STEAM_COMPAT_CLIENT_INSTALL_PATH/legacycompat/Steam.dll"
+  [ -n "$STEAM_COMPAT_INSTALL_PATH" ] && [ -f "$src" ] || return 0
+  dst="$(dirname "$STEAM_COMPAT_INSTALL_PATH")/Steam.dll"
+  [ -L "$dst" ] || [ ! -e "$dst" ] || return 0
+  [ "$(readlink "$dst" 2>/dev/null)" = "$src" ] && return 0
+  if ln -sfn "$src" "$dst" 2>> "$log"; then
+    echo "=== linked legacy Steam.dll at $dst ===" >> "$log" 2>&1 || true
+  else
+    echo "=== could not link legacy Steam.dll at $dst ===" >> "$log" 2>&1 || true
+  fi
+}
+
 bridge_files="steamclient64.dll steamclient.dll tier0_s64.dll vstdlib_s64.dll"
 bridge_files="$bridge_files lsteamclient.dll lsteamclient.so steam.exe"
 # A clone cannot cross drives, so a prefix on another drive clones from a copy of the
@@ -1103,6 +1117,7 @@ if [ -d "$bridge_src" ] && [ -n "$WINEPREFIX" ]; then
     export STEAM_COMPAT_CLIENT_INSTALL_PATH="$native_client"
   fi
   install_legacycompat
+  link_legacy_steam_dll
   echo "=== bridge staged into $prefix_steam ===" >> "$log" 2>&1 || true
   echo "WINEDLLPATH=$WINEDLLPATH" >> "$log" 2>&1 || true
   echo "WINEDLLOVERRIDES=$WINEDLLOVERRIDES" >> "$log" 2>&1 || true

@@ -383,6 +383,45 @@ struct UninstallTests {
         #expect(FileManager.default.fileExists(atPath: library.compatdata.appending(path: ".notproton-template.lock").path))
     }
 
+    @Test("Uninstall removes the Steam.dll links it made and leaves any other Steam.dll")
+    func removesSteamDLLLinks() async throws {
+        let layout = try layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        let files = FileManager.default
+        let ours = SteamLibrary(root: layout.root.appending(path: "ours"))
+        let foreign = SteamLibrary(root: layout.root.appending(path: "foreign"))
+        let real = SteamLibrary(root: layout.root.appending(path: "real"))
+        let empty = SteamLibrary(root: layout.root.appending(path: "empty"))
+        func dll(_ library: SteamLibrary) -> URL { library.steamapps.appending(path: "common/Steam.dll") }
+        for library in [ours, foreign, real] {
+            try files.createDirectory(at: dll(library).deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        try files.createSymbolicLink(
+            atPath: dll(ours).path(percentEncoded: false),
+            withDestinationPath: layout.legacyCompat.appending(path: "Steam.dll").path(percentEncoded: false))
+        let elsewhere = layout.root.appending(path: "elsewhere/Steam.dll")
+        try files.createDirectory(at: elsewhere.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("other".utf8).write(to: elsewhere)
+        try files.createSymbolicLink(
+            atPath: dll(foreign).path(percentEncoded: false),
+            withDestinationPath: elsewhere.path(percentEncoded: false))
+        try Data("real".utf8).write(to: dll(real))
+
+        let outcome = try await Uninstall.run(
+            app: layout.app, innerPlist: layout.innerPlist, updateBlocks: [layout.updateBlock],
+            legacyCompat: layout.legacyCompat, compatTools: layout.compatTools,
+            directories: [layout.support, layout.caches], libraries: [ours, foreign, real, empty],
+            repair: { _ in }, stop: { _ in false })
+
+        #expect((try? files.destinationOfSymbolicLink(atPath: dll(ours).path(percentEncoded: false))) == nil)
+        #expect(outcome.removed.filter { $0 == "Steam.dll" }.count == 1)
+        #expect(
+            try files.destinationOfSymbolicLink(atPath: dll(foreign).path(percentEncoded: false))
+                == elsewhere.path(percentEncoded: false))
+        #expect(try String(contentsOf: dll(real), encoding: .utf8) == "real")
+        #expect(!files.fileExists(atPath: empty.root.path(percentEncoded: false)))
+    }
+
     @Test("Uninstall reports template cleanup refusal rather than claiming completion")
     func reportsTemplateCleanupFailure() async throws {
         let layout = try layout()
