@@ -1387,8 +1387,15 @@ gamemode_escape() {
 }
 
 # macOS only posts its own notification when it switched Game Mode on itself, so
-# this one is NotProton's. Failing to notify is not a reason to fail the launch.
+# this one is NotProton's. The notify helper carries the app's icon in its
+# bundle, so it is the preferred poster; without it the banner degrades to the
+# plain system notification. Failing to notify is not a reason to fail the launch.
 gamemode_notify() {
+  notify_tool="$np_support/notify.app/Contents/MacOS/notify"
+  if [ -x "$notify_tool" ]; then
+    "$notify_tool" "$1" "$2" >/dev/null 2>&1 || true
+    return 0
+  fi
   /usr/bin/osascript >/dev/null 2>&1 <<APPLESCRIPT || true
 display notification "$(gamemode_escape "$2")" with title "$(gamemode_escape "$1")"
 APPLESCRIPT

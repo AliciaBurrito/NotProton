@@ -63,7 +63,7 @@ DEPS := $(OBJS:.o=.d)
         anchorcheck callscheck sigdb-fixtures webpatch-fixtures peicon-fixtures panel-behavior app-tests \
         tests-list overlay-shim overlay-shim-install overlay-shim-tests \
         overlay-shim-bench iconmaker icon \
-        appinfo helpers-install ntdll-resolve bridge runcheck compatcheck \
+        appinfo notify helpers-install ntdll-resolve bridge runcheck compatcheck \
         compatsvc-check scriptcheck envcheck buildcheck settingscheck routecheck bridgecheck gamedrivecheck launch-shell FORCE
 
 APP_PAYLOAD := app/Sources/NotProtonApp/Resources/payload
@@ -440,10 +440,31 @@ $(APPINFO): helpers/appinfo.swift
 	swiftc -O -target $(ARCH)-apple-macos$(MIN_VER) -o $@ $<
 	@echo "==> Built $@"
 
-helpers-install: $(ICONMAKER) $(APPINFO)
+NOTIFY_APP := $(OUT_DIR)/notify.app
+
+notify: $(NOTIFY_APP)
+
+# The bundle is what carries the icon, so it is built whole here instead of
+# being assembled at run time: the plist and icon come from the tree and the
+# ad-hoc signature is applied once, at build.
+$(NOTIFY_APP): helpers/notify/notify.swift helpers/notify/Info.plist $(ICON_CAR)
+	@rm -rf $@
+	@mkdir -p $@/Contents/MacOS $@/Contents/Resources
+	swiftc -O -target $(ARCH)-apple-macos$(MIN_VER) -framework UserNotifications \
+		-o $@/Contents/MacOS/notify helpers/notify/notify.swift
+	cp helpers/notify/Info.plist $@/Contents/Info.plist
+	cp $(ICON_DIR)/NotProton.icns $@/Contents/Resources/NotProton.icns
+	codesign -fs - $@
+	@echo "==> Built $@"
+
+helpers-install: $(ICONMAKER) $(APPINFO) $(NOTIFY_APP)
 	$(call install_atomically,$(ICONMAKER),$(SUPPORT_DIR)/iconmaker)
 	$(call install_atomically,$(APPINFO),$(SUPPORT_DIR)/appinfo)
-	@echo "==> Installed: $(SUPPORT_DIR)/{iconmaker,appinfo}"
+	@rm -rf "$(SUPPORT_DIR)/notify.app.new"
+	cp -R $(NOTIFY_APP) "$(SUPPORT_DIR)/notify.app.new"
+	rm -rf "$(SUPPORT_DIR)/notify.app"
+	mv -f "$(SUPPORT_DIR)/notify.app.new" "$(SUPPORT_DIR)/notify.app"
+	@echo "==> Installed: $(SUPPORT_DIR)/{iconmaker,appinfo,notify.app}"
 
 dobby:
 	@mkdir -p $(DOBBY_DIR)
@@ -503,13 +524,15 @@ bridge:
 	steam-shim/build.sh
 	@echo "==> Built the bridge, now run: $(MAKE) app-payload"
 
-app-payload: $(TARGET) $(OVERLAY_SHIM) $(ICONMAKER) $(APPINFO)
+app-payload: $(TARGET) $(OVERLAY_SHIM) $(ICONMAKER) $(APPINFO) $(NOTIFY_APP)
 	@mkdir -p "$(APP_PAYLOAD)/signatures/macos.arm64"
 	@mkdir -p "$(APP_PAYLOAD)/bridge"
 	cp -f $(TARGET) "$(APP_PAYLOAD)/notproton.dylib"
 	cp -f $(OVERLAY_SHIM) "$(APP_PAYLOAD)/overlay-shim.dylib"
 	cp -f $(ICONMAKER) "$(APP_PAYLOAD)/iconmaker"
 	cp -f $(APPINFO) "$(APP_PAYLOAD)/appinfo"
+	rm -rf "$(APP_PAYLOAD)/notify.app"
+	cp -R $(NOTIFY_APP) "$(APP_PAYLOAD)/notify.app"
 	cp -f dylib/feats/compat_run.sh "$(APP_PAYLOAD)/run"
 	cp -f signatures/macos.arm64/*.json "$(APP_PAYLOAD)/signatures/macos.arm64/"
 	@set -e; for spec in $(BRIDGE_FILES); do \
