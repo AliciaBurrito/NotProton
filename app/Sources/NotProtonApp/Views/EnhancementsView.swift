@@ -29,24 +29,30 @@ struct EnhancementsView: View {
         .task { if status.snapshot == nil { await status.refresh() } }
     }
 
+    // Only show feedback generated for this page (the Game Mode feedback), so
+    // Status-page feedback (e.g. "Steam client updates are blocked") stays on Status.
+    private var showsFeedback: Bool { status.feedbackPane == .enhancements }
+
     private func form(_ snapshot: StatusSnapshot) -> some View {
         Form {
-            if let failure = status.failure {
-                StatusRow(
-                    title: "Failed",
-                    value: failure,
-                    tone: .bad,
-                    action: status.failureRemedy?.settingsPane.map { pane in
-                        StatusAction(label: Remedy.settingsButton) {
-                            Remedy.openSettings(pane)
+            if showsFeedback {
+                if let failure = status.failure {
+                    StatusRow(
+                        title: "Failed",
+                        value: failure,
+                        tone: .bad,
+                        action: status.failureRemedy?.settingsPane.map { pane in
+                            StatusAction(label: Remedy.settingsButton) {
+                                Remedy.openSettings(pane)
+                            }
                         }
-                    }
-                )
-            } else if let outcome = status.outcome {
-                StatusRow(title: "Done", value: outcome, tone: .ok)
+                    )
+                } else if let outcome = status.outcome {
+                    StatusRow(title: "Done", value: outcome, tone: .ok)
+                }
             }
 
-            if let activity = status.activity {
+            if showsFeedback, let activity = status.activity {
                 HStack(spacing: 10) {
                     ProgressView()
                         .controlSize(.small)

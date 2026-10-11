@@ -282,6 +282,10 @@ struct StatusView: View {
         )
     }
 
+    // Feedback belongs to the page its action lives on. Status shows everything
+    // generated here (i.e. not the Enhancements page's Game Mode feedback).
+    private var showsFeedback: Bool { status.feedbackPane != .enhancements }
+
     private func statusForm(_ snapshot: StatusSnapshot) -> some View {
         ScrollViewReader { proxy in
             form(snapshot)
@@ -294,26 +298,28 @@ struct StatusView: View {
 
     private func form(_ snapshot: StatusSnapshot) -> some View {
         Form {
-            if let failure = status.failure {
-                StatusRow(
-                    title: "Failed",
-                    value: failure,
-                    tone: .bad,
-                    action: status.failureRemedy?.settingsPane.map { pane in
-                        StatusAction(label: Remedy.settingsButton) {
-                            Remedy.openSettings(pane)
+            if showsFeedback {
+                if let failure = status.failure {
+                    StatusRow(
+                        title: "Failed",
+                        value: failure,
+                        tone: .bad,
+                        action: status.failureRemedy?.settingsPane.map { pane in
+                            StatusAction(label: Remedy.settingsButton) {
+                                Remedy.openSettings(pane)
+                            }
                         }
-                    }
-                )
-            } else if let outcome = status.outcome {
-                StatusRow(title: "Done", value: outcome, tone: .ok)
+                    )
+                } else if let outcome = status.outcome {
+                    StatusRow(title: "Done", value: outcome, tone: .ok)
+                }
             }
 
             if let failure = status.templateCleanupFailure {
                 StatusRow(title: "Template cleanup incomplete", value: failure, tone: .warning)
             }
 
-            if let activity = status.activity {
+            if showsFeedback, let activity = status.activity {
                 HStack(spacing: 10) {
                     ProgressView()
                         .controlSize(.small)

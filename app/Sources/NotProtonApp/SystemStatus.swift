@@ -67,6 +67,10 @@ final class SystemStatus {
     private(set) var failure: String?
     private(set) var failureRemedy: Remedy?
 
+    // The page the current feedback (outcome / failure / activity) belongs to, so each
+    // pane only shows feedback generated for its own controls.
+    private(set) var feedbackPane: Pane?
+
     private var runInFlight = false
     // Tests replace the refresh so a run does not modify the real Steam/support folders
     // if run on an actual user's machine.
@@ -266,6 +270,7 @@ final class SystemStatus {
 
         guard panel.runModal() == .OK, let picked = panel.url else { return }
 
+        feedbackPane = .status
         clearFailure()
         outcome = nil
 
@@ -316,6 +321,7 @@ final class SystemStatus {
 
     func perform(
         from first: String,
+        pane: Pane = .status,
         _ body: (_ progress: @escaping @Sendable (String) -> Void) async throws -> String?
     ) async {
         guard !runInFlight else {
@@ -325,6 +331,7 @@ final class SystemStatus {
         runInFlight = true
         defer { runInFlight = false }
 
+        feedbackPane = pane
         clearFailure()
         outcome = nil
         let run = beginRun(first)
@@ -343,6 +350,7 @@ final class SystemStatus {
 
     private func setUpRunner(from install: CrossOverInstall?, replacingExisting: Bool = false) async {
         guard let install else {
+            feedbackPane = .status
             setFailure("No supported copy of CrossOver found.")
             AppLog.note("run refused: no supported CrossOver")
             outcome = nil
@@ -467,7 +475,8 @@ final class SystemStatus {
         guard isIdle else { return }
         await perform(
             from: enabled ? "Turning on Game Mode support"
-                          : "Turning off Game Mode support"
+                          : "Turning off Game Mode support",
+            pane: .enhancements
         ) { _ in
             try await Task.detached(priority: .userInitiated) {
                 try GameModeFeature.setEnabled(enabled)
