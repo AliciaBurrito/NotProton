@@ -1,8 +1,9 @@
 CC       := clang
 ARCH     := arm64
 MIN_VER  := 15.0
+AVAIL    := -Werror=unguarded-availability-new
 
-CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) \
+CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
             -std=c17 -O2 -Wall -Wextra -Wno-unused-parameter \
             -fPIC -MMD -MP \
             -Idylib -Ivendor -Ivendor/dobby/include
@@ -123,6 +124,10 @@ gamedrivecheck:
 launchercheck:
 	@if [ ! -f dylib/tests/launchercheck.sh ]; then $(call SKIP,launchercheck,dylib/tests/launchercheck.sh); exit 0; fi; \
 	sh dylib/tests/launchercheck.sh dylib/feats/compat_run.sh
+
+.PHONY: mincheck
+mincheck:
+	@sh dylib/tests/mincheck.sh "$(APP_BUNDLE)" "$(MIN_VER)"
 
 # runcheck owns compat_run.sh, whose warnings wait for a change that can move
 # the embedded __text baseline
@@ -341,7 +346,7 @@ $(ARM64_DYLIB): $(OBJS)
 
 $(X86_STUB): dylib/stub_x86_64.c
 	@mkdir -p $(dir $@)
-	$(CC) -arch x86_64 -mmacosx-version-min=$(MIN_VER) \
+	$(CC) -arch x86_64 -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
 		-dynamiclib -install_name @rpath/notproton.dylib \
 		-o $@ $<
 
@@ -365,7 +370,7 @@ OVERLAY_SHIM_SRC   := overlay-shim/overlay_shim.m
 OVERLAY_SHIM_ARM   := $(OUT_DIR)/overlay-shim.arm64.dylib
 OVERLAY_SHIM_X86   := $(OUT_DIR)/overlay-shim.x86_64.dylib
 OVERLAY_SHIM       := $(OUT_DIR)/overlay-shim.dylib
-OVERLAY_SHIM_FLAGS := -mmacosx-version-min=$(MIN_VER) -dynamiclib -O2 -Wall -Wextra \
+OVERLAY_SHIM_FLAGS := -mmacosx-version-min=$(MIN_VER) $(AVAIL) -dynamiclib -O2 -Wall -Wextra \
                       -install_name @rpath/overlay-shim.dylib \
                       -framework Metal -framework QuartzCore \
                       -framework CoreGraphics -framework CoreFoundation
@@ -432,7 +437,7 @@ iconmaker: $(ICONMAKER)
 
 $(ICONMAKER): helpers/iconmaker.swift dylib/util/peicon.c dylib/util/peicon.h
 	@mkdir -p $(OUT_DIR)
-	$(CC) -c -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) -std=c17 -O2 \
+	$(CC) -c -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) $(AVAIL) -std=c17 -O2 \
 		-Wall -Wextra -o $(OUT_DIR)/peicon-host.o dylib/util/peicon.c
 	swiftc -O -target $(ARCH)-apple-macos$(MIN_VER) \
 		-framework AppKit -import-objc-header dylib/util/peicon.h \

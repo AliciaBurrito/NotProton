@@ -155,7 +155,7 @@ if [ "$do_unix" -eq 1 ]; then
 	count=$(echo "$objs" | wc -l | tr -d ' ')
 	echo "==> unix half: $count sources from Makefile.in SOURCES"
 
-	CXXFLAGS="-arch $UNIX_ARCH -mmacosx-version-min=$MIN_VER -I$dll -I$src -Iinclude -I$WINE_SRC_REL/include \
+	CXXFLAGS="-arch $UNIX_ARCH -mmacosx-version-min=$MIN_VER -Werror=unguarded-availability-new -I$dll -I$src -Iinclude -I$WINE_SRC_REL/include \
 -D__WINESRC__ -DSTEAM_API_EXPORTS -Dprivate=public -Dprotected=public -DWINE_UNIX_LIB \
 -fPIC -fasynchronous-unwind-tables -g -O2"
 

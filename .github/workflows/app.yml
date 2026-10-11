@@ -102,6 +102,9 @@ jobs:
       - name: Build the app
         run: make app
 
+      - name: Check the minimum macOS version
+        run: make -s mincheck
+
       - name: Run the hermetic C suites
         run: |
           make -s sigcheck
