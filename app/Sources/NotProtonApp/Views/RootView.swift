@@ -4,6 +4,7 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
     case status
     case prefixes
     case backups
+    case enhancements
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
         case .status: "Status"
         case .prefixes: "Prefixes"
         case .backups: "Prefix Backups"
+        case .enhancements: "Enhancements"
         }
     }
 
@@ -20,6 +22,7 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
         case .status: "checklist"
         case .prefixes: "externaldrive"
         case .backups: "externaldrive.badge.timemachine"
+        case .enhancements: "wand.and.stars"
         }
     }
 }
@@ -43,6 +46,7 @@ struct RootView: View {
             case .status: StatusView()
             case .prefixes: PrefixesView()
             case .backups: BackupsView()
+            case .enhancements: EnhancementsView()
             }
         }
     }
