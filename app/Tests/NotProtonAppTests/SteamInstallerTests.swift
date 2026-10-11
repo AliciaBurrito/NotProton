@@ -207,6 +207,32 @@ struct SteamInstallerTests {
         #expect(!(described.stdout + described.stderr).contains("TeamIdentifier=MXGJJ98X76"))
     }
 
+    @Test("A Steam carrying Finder info or a resource fork still installs, and only those are cleared")
+    func installsOverFinderData() async throws {
+        let work = try scratchDirectory("install")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let fixture = try await self.fixture(into: work)
+        let app = fixture.app.path(percentEncoded: false)
+        let icon = fixture.app.appending(path: "Icon\r").path(percentEncoded: false)
+        try Data().write(to: URL(filePath: icon))
+        try Shell.check("/usr/bin/xattr", ["-w", "com.apple.ResourceFork", "icns", icon])
+        try Shell.check("/usr/bin/xattr", ["-wx", "com.apple.FinderInfo", String(repeating: "0", count: 64), icon])
+        try Shell.check("/usr/bin/xattr", [
+            "-wx", "com.apple.FinderInfo", "0000000000000000040000000000000000000000000000000000000000000000", app,
+        ])
+        try Shell.check("/usr/bin/xattr", ["-w", "com.notproton.keep", "1", app])
+        #expect(!(try Shell.run("/usr/bin/codesign", ["-f", "-s", "-", app])).succeeded)
+
+        _ = try install(fixture)
+
+        let verified = try Shell.run("/usr/bin/codesign", ["--verify", "--strict", app])
+        #expect(verified.succeeded, "\(verified.stderr)")
+        let left = try Shell.run("/usr/bin/xattr", ["-lr", app]).stdout
+        #expect(!left.contains("com.apple.FinderInfo"))
+        #expect(!left.contains("com.apple.ResourceFork"))
+        #expect(left.contains("com.notproton.keep"))
+    }
+
     @Test("An insert belonging to something else stops the install and is left alone")
     func refusesForeignInsert() async throws {
         let work = try scratchDirectory("install")
