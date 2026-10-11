@@ -216,16 +216,22 @@ run_link
 is "the launch goes on" reached "$(cat "$work/out")"
 is "a missing link is created" "$work/client/legacycompat/Steam.dll" "$(readlink "$work/lib/common/Steam.dll")"
 logged "the link is logged" "=== linked legacy Steam.dll at $work/lib/common/Steam.dll ==="
+is "a new link is hidden" hidden "$(stat -f %Sf "$work/lib/common/Steam.dll")"
+is "the linked file is not hidden" - "$(stat -f %Sf "$work/client/legacycompat/Steam.dll")"
+chflags -h nohidden "$work/lib/common/Steam.dll"
 : > "$work/log"
 run_link
 is "a current link is left alone" "" "$(cat "$work/log")"
+is "a current link is not touched" - "$(stat -f %Sf "$work/lib/common/Steam.dll")"
 ln -sfn "$work/old/Steam.dll" "$work/lib/common/Steam.dll"
 run_link
 is "a stale link is replaced" "$work/client/legacycompat/Steam.dll" "$(readlink "$work/lib/common/Steam.dll")"
+is "a replaced link is hidden" hidden "$(stat -f %Sf "$work/lib/common/Steam.dll")"
 rm -f "$work/lib/common/Steam.dll"
 printf 'real\n' > "$work/lib/common/Steam.dll"
 run_link
 is "a real file is kept" real "$(cat "$work/lib/common/Steam.dll")"
+is "a real file is not hidden" - "$(stat -f %Sf "$work/lib/common/Steam.dll")"
 rm -f "$work/lib/common/Steam.dll"
 chmod 500 "$work/lib/common"
 : > "$work/log"

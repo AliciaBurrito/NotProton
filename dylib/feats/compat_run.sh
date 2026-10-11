@@ -1021,6 +1021,7 @@ link_legacy_steam_dll() {
   [ -L "$dst" ] || [ ! -e "$dst" ] || return 0
   [ "$(readlink "$dst" 2>/dev/null)" = "$src" ] && return 0
   if ln -sfn "$src" "$dst" 2>> "$log"; then
+    chflags -h hidden "$dst" 2>/dev/null || true
     echo "=== linked legacy Steam.dll at $dst ===" >> "$log" 2>&1 || true
   else
     echo "=== could not link legacy Steam.dll at $dst ===" >> "$log" 2>&1 || true
