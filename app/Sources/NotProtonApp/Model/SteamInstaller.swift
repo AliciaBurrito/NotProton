@@ -87,7 +87,7 @@ enum SteamInstaller {
         try assertBundleIsPresent(app)
         try assertInsertIsDeployedOrAbsent(at: plist, dylib: dylib)
         let installationLock = holdingInstallationLock ? -1 : try DeploymentContent.acquireInstallationLock(for: app)
-        defer { if installationLock >= 0 { close(installationLock) } }
+        defer { if installationLock >= 0 { FileLock.release(installationLock) } }
         guard let dylibHashes = try MachOBuild.hashesIgnoringSignature(of: payload.dylib) else {
             throw StepFailure(step: step, detail: "The bundled NotProton dylib is invalid.")
         }

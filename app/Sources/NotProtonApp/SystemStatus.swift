@@ -242,7 +242,7 @@ final class SystemStatus {
         pendingRemoval = nil
         await perform(from: RunnerInstaller.removeStep) { _ in
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             try await requireUnblockedContent()
             let changed = try await Task.detached(priority: .userInitiated) {
                 try RunnerInstaller.removeClone(forBuild: build)
@@ -349,7 +349,7 @@ final class SystemStatus {
 
         await perform(from: RunnerSetup.Phase.cloning.label) { progress in
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             try await requireInstallableContent()
             let result = try await Task.detached(priority: .userInitiated) {
                 try RunnerSetup.run(from: install, replacingExisting: replacingExisting) {
@@ -365,7 +365,7 @@ final class SystemStatus {
         guard canInstall else { return }
         await perform(from: ValveFetcher.Phase.verifying.label) { progress in
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             try await requireInstallableContent()
             let result = try await ValveFetcher.run { progress($0.label) }
             return result.wroteNothing ? nil : "Downloaded missing components."
@@ -404,7 +404,7 @@ final class SystemStatus {
     func installIntoSteam() async {
         await perform(from: InstallPhase.checkingPayload.label) { progress in
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             let result = try await Task.detached(priority: .userInitiated) {
                 try SteamInstaller.run(holdingInstallationLock: true, report: { progress($0.label) })
             }.value
@@ -464,7 +464,7 @@ final class SystemStatus {
     func repairSteam() async {
         await perform(from: RepairPhase.checking.label) { progress in
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             let result = try await SteamRepair.run { progress($0.label) }
 
             var parts = ["Steam restored to its original state."]
@@ -491,7 +491,7 @@ final class SystemStatus {
     func removeEverything() async {
         await perform(from: UninstallPhase.stoppingClient.label) { progress in
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             let result = try await Uninstall.run { progress($0.label) }
 
             return result.steamNeedsRedownload
@@ -527,7 +527,7 @@ final class SystemStatus {
         let measured = await Task.detached(priority: .utility) {
             if cleanTemplates, let lock = try? DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app) {
                 RunnerInstaller.removeLeftoverRemovals(runners: runners)
-                close(lock)
+                FileLock.release(lock)
             }
             let failures = cleanTemplates
                 ? RunnerInstaller.removeStalePrefixTemplates(runners: runners, libraries: libraries, reportBusy: false) : []

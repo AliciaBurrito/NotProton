@@ -308,7 +308,7 @@ enum PrefixStore {
     ) -> Bool {
         let lock = open(prefix.root.appending(path: ".notproton-prefix.lock").path(percentEncoded: false), O_RDWR | O_NOFOLLOW | O_CLOEXEC)
         if lock >= 0 {
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             var info = stat()
             guard fstat(lock, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
                 flock(lock, LOCK_EX | LOCK_NB) == 0

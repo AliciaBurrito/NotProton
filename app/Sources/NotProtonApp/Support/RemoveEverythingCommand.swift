@@ -11,7 +11,7 @@ enum RemoveEverythingCommand {
     private static func perform() async -> Int32 {
         do {
             let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            defer { FileLock.release(lock) }
             let output = Output()
             let result = try await Uninstall.run { phase in
                 if case .restoring(.finished) = phase { return }

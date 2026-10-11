@@ -181,13 +181,13 @@ struct DeploymentContentTests {
         let app = root.appending(path: "Steam.app")
         do {
             let fd = try DeploymentContent.acquireInstallationLock(for: app)
-            defer { close(fd) }
+            defer { FileLock.release(fd) }
             #expect(throws: StepFailure.self) { try DeploymentContent.acquireInstallationLock(for: app) }
             let status = try Shell.run("/bin/sh", ["-c", #"exec 9< "$1"; /usr/bin/lockf -s -t 0 9"#, "fixture", root.path]).status
             #expect(status == 75)
         }
         let next = try DeploymentContent.acquireInstallationLock(for: app)
-        close(next)
+        FileLock.release(next)
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
     }
 

@@ -89,7 +89,7 @@ struct TemplateCleanupTests {
         let save = layout.library.compatdata.appending(path: "700330/pfx/drive_c/save.dat")
         try FileManager.default.createDirectory(at: save.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("save".utf8).write(to: save)
-        let opened = open(layout.lock.path, O_RDWR | O_CREAT, 0o600)
+        let opened = open(layout.lock.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
         #expect(opened >= 0)
         guard opened >= 0 else { return }
         defer { close(opened) }
@@ -100,7 +100,7 @@ struct TemplateCleanupTests {
         #expect(FileManager.default.fileExists(atPath: layout.lock.path))
         #expect(FileManager.default.fileExists(atPath: save.path))
         #expect(flock(opened, LOCK_EX | LOCK_NB) == 0)
-        let next = open(layout.lock.path, O_RDWR | O_CREAT, 0o600)
+        let next = open(layout.lock.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
         #expect(next >= 0)
         guard next >= 0 else { return }
         defer { close(next) }
@@ -163,7 +163,7 @@ struct TemplateCleanupTests {
     func reportsBusyLock() throws {
         let layout = try Layout()
         defer { try? FileManager.default.removeItem(at: layout.root) }
-        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)
@@ -203,7 +203,7 @@ struct TemplateCleanupTests {
     func refreshRetriesWithoutRunners() async throws {
         let layout = try Layout()
         defer { try? FileManager.default.removeItem(at: layout.root) }
-        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)
@@ -365,7 +365,7 @@ struct TemplateCleanupTests {
     func swiftLockBlocksShell() throws {
         let layout = try Layout()
         defer { try? FileManager.default.removeItem(at: layout.root) }
-        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)
