@@ -447,7 +447,7 @@ notify: $(NOTIFY_APP)
 # The bundle is what carries the icon, so it is built whole here instead of
 # being assembled at run time: the plist and icon come from the tree and the
 # ad-hoc signature is applied once, at build.
-$(NOTIFY_APP): helpers/notify/notify.swift helpers/notify/Info.plist $(ICON_CAR)
+$(NOTIFY_APP): helpers/notify/notify.swift helpers/notify/Info.plist icon
 	@rm -rf $@
 	@mkdir -p $@/Contents/MacOS $@/Contents/Resources
 	swiftc -O -target $(ARCH)-apple-macos$(MIN_VER) -framework UserNotifications \
