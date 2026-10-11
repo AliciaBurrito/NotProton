@@ -3,6 +3,7 @@ set -eu
 
 app="$1"
 min="$2"
+sdk="$3"
 
 [ -d "$app" ] || { echo "mincheck: $app not found"; exit 1; }
 
@@ -42,6 +43,13 @@ while IFS= read -r f; do
   done
 done < "$list"
 
+main="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+built=$(xcrun vtool -show-build "$main" 2>/dev/null | awk '$1 == "sdk" { print $2; exit }')
+if [ -z "$built" ] || newer "$sdk" "$built"; then
+  echo "  built against SDK ${built:-unknown}, below $sdk: ${main#"$app"/}"
+  bad=1
+fi
+
 [ "$checked" -gt 0 ] || { echo "mincheck: no Mach-O files in $app"; exit 1; }
-[ "$bad" -eq 0 ] || { echo "==> mincheck: binaries above macOS $min"; exit 1; }
+[ "$bad" -eq 0 ] || { echo "==> mincheck: failed"; exit 1; }
 echo "==> mincheck: $checked binaries run on macOS $min"

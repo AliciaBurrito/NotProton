@@ -1,6 +1,7 @@
 CC       := clang
 ARCH     := arm64
 MIN_VER  := 15.0
+GLASS_SDK := 26.0
 AVAIL    := -Werror=unguarded-availability-new
 
 CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
@@ -127,7 +128,7 @@ launchercheck:
 
 .PHONY: mincheck
 mincheck:
-	@sh dylib/tests/mincheck.sh "$(APP_BUNDLE)" "$(MIN_VER)"
+	@sh dylib/tests/mincheck.sh "$(APP_BUNDLE)" "$(MIN_VER)" "$(GLASS_SDK)"
 
 # runcheck owns compat_run.sh, whose warnings wait for a change that can move
 # the embedded __text baseline
@@ -593,6 +594,9 @@ app: app-payload $(ICON_CAR)
 	ditto "$$(swift build --package-path app -c release --show-bin-path)/Sparkle.framework" \
 		"$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework"
 	install_name_tool -add_rpath @executable_path/../Frameworks \
+		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
+	xcrun vtool -set-build-version macos $(MIN_VER) "$$(xcrun --sdk macosx --show-sdk-version)" \
+		-replace -output "$(APP_BUNDLE)/Contents/MacOS/NotProtonApp" \
 		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
 	cp -R "$$(swift build --package-path app -c release --show-bin-path)/NotProtonApp_NotProtonApp.bundle" \
 		"$(APP_BUNDLE)/Contents/Resources/"
