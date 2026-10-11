@@ -3,7 +3,7 @@
 import Foundation
 
 enum InstallPayload {
-    static let step = "Find NotProton's components"
+    static let step = L10n.tr("Find NotProton's components")
 
     struct Located: Sendable {
         let dylib: URL
@@ -22,7 +22,7 @@ enum InstallPayload {
         guard let url = bundle.url(forResource: "payload", withExtension: nil) else {
             throw StepFailure(
                 step: step,
-                detail: "This build of NotProton carries no components at all."
+                detail: L10n.tr("This build of NotProton carries no components at all.")
             )
         }
         return url
@@ -74,8 +74,7 @@ enum InstallPayload {
         guard missing.isEmpty, let builtAt, builtAt > 0 else {
             throw StepFailure(
                 step: step,
-                detail: "These components are missing: \(missing.joined(separator: ", ")). "
-                    + "Run make app-payload and build the app again."
+                detail: L10n.tr("These components are missing: \(missing.joined(separator: ", ")). Run make app-payload and build the app again.")
             )
         }
 
