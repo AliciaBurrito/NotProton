@@ -21,6 +21,16 @@ enum DeploymentContent {
         var executable = false
 
         func matches() throws -> Bool {
+            // A directory source (a bundle such as notify.app) is compared file by
+            // file; a missing source must still surface as an error, so an absent
+            // path falls through to the single-file comparison below.
+            var sourceInfo = stat()
+            let sourceIsDirectory = lstat(source.path(percentEncoded: false), &sourceInfo) == 0
+                && sourceInfo.st_mode & S_IFMT == S_IFDIR
+            if sourceIsDirectory {
+                return try directoryMatches()
+            }
+
             let expected = try Digest.sha256(of: source)
             var info = stat()
             guard lstat(destination.path(percentEncoded: false), &info) == 0,
@@ -31,6 +41,49 @@ enum DeploymentContent {
             if Digest.sha256IfPresent(destination) == expected { return true }
             guard allowsResigning else { return false }
             return try MachOBuild.matchesIgnoringSignature(source, destination)
+        }
+
+        // A bundled directory matches only when the installed copy holds exactly the
+        // same regular files, byte for byte: none may be added, removed, or changed.
+        private func directoryMatches() throws -> Bool {
+            var info = stat()
+            guard lstat(destination.path(percentEncoded: false), &info) == 0,
+                info.st_mode & S_IFMT == S_IFDIR else { return false }
+            let sourceFiles = try fileDigests(in: source)
+            let destinationFiles = try fileDigests(in: destination)
+            return sourceFiles == destinationFiles
+        }
+
+        // Maps each regular file under root to the SHA-256 of its contents, keyed
+        // by its path relative to root. Two trees are equal only when both maps are.
+        private func fileDigests(in root: URL) throws -> [String: String] {
+            let fm = FileManager.default
+            var digests: [String: String] = [:]
+            // Canonicalize the root to the same fully-resolved form the enumerator
+            // yields. URL paths are not resolved (on macOS /var is a symlink to
+            // /private/var), so prefix-stripping with the unresolved form would
+            // corrupt the relative keys and make two identical trees compare
+            // unequal; realpath resolves through the kernel to match the enumerator.
+            let rawRoot = root.path(percentEncoded: false)
+            let rootPath: String
+            if let resolved = realpath(rawRoot, nil) {
+                rootPath = String(cString: resolved)
+                free(resolved)
+            } else {
+                rootPath = rawRoot
+            }
+            let prefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+            guard let enumerator = fm.enumerator(
+                at: root, includingPropertiesForKeys: [.isRegularFileKey], options: []
+            ) else { return digests }
+            while let entry = enumerator.nextObject() as? URL {
+                let isFile = try entry.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile
+                guard isFile == true else { continue }
+                let entryPath = entry.path(percentEncoded: false)
+                guard entryPath.hasPrefix(prefix) else { continue }
+                digests[String(entryPath.dropFirst(prefix.count))] = try Digest.sha256(of: entry)
+            }
+            return digests
         }
     }
 
@@ -106,7 +159,8 @@ enum DeploymentContent {
 
     static func files(
         payload: InstallPayload.Located, bridgePayload: BridgePayload.Located,
-        app: URL, bridge: URL, signatures: URL, overlayShim: URL, iconmaker: URL, appinfo: URL,
+        app: URL, bridge: URL, signatures: URL, overlayShim: URL, iconmaker: URL,
+        appinfo: URL, notifyApp: URL,
         compatTools: URL, tools: [InstalledTool], runners: URL
     ) -> [File] {
         var files = [
@@ -115,6 +169,7 @@ enum DeploymentContent {
             File(source: payload.overlayShim, destination: overlayShim, name: "overlay-shim.dylib"),
             File(source: payload.iconmaker, destination: iconmaker, name: "iconmaker", executable: true),
             File(source: payload.appinfo, destination: appinfo, name: "appinfo", executable: true),
+            File(source: payload.notifyApp, destination: notifyApp, name: "notify.app"),
         ]
         files += payload.signatures.map {
             File(source: $0, destination: signatures.appending(path: $0.lastPathComponent),
@@ -151,7 +206,8 @@ enum DeploymentContent {
             let files = files(payload: payload, bridgePayload: bridge, app: SupportPaths.Steam.app,
                               bridge: SupportPaths.bridge, signatures: SupportPaths.signatures,
                               overlayShim: SupportPaths.overlayShim, iconmaker: SupportPaths.iconmaker,
-                              appinfo: SupportPaths.appinfo, compatTools: SupportPaths.Steam.compatTools,
+                              appinfo: SupportPaths.appinfo, notifyApp: SupportPaths.notifyApp,
+                              compatTools: SupportPaths.Steam.compatTools,
                               tools: CompatToolList.installed(), runners: SupportPaths.runners)
             return try inspect(files: files, bundled: Build(version: version, builtAt: payload.builtAt),
                                installed: readBuild(at: record(beside: SupportPaths.deployedVersion)),

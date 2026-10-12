@@ -335,8 +335,8 @@ final class SystemStatus {
         guard XcodeSource.hasTool(inBundle: picked) else {
             let alert = NSAlert()
             alert.messageText = "\(name) is not a usable copy of Xcode."
-            alert.informativeText = "NotProton drives Game Mode through gamepolicyctl, which "
-                + "lives inside the copy. It may be older than the tool or incomplete."
+            alert.informativeText = "NotProton utilizes gamepolicyctl, which "
+                + "lives inside versions of Xcode supporting Game Porting Toolkit. The provided App is either outdated or invalid."
             alert.runModal()
             AppLog.note("xcode choice refused: \(picked.path(percentEncoded: false))")
             return

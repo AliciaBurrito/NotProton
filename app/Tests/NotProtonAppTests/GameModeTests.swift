@@ -189,7 +189,7 @@ struct XcodeSourceTests {
     func findsXcodeBundles() throws {
         let root = try fixtureRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        for name in ["Xcode.app", "Xcode Preview.app", "XcodeBeta.app"] {
+        for name in ["Xcode.app", "Xcode-beta.app"] {
             _ = try makeBundle(named: name, in: root)
         }
         // Same neighborhood, not the same tool: the name passes, but without
@@ -205,7 +205,7 @@ struct XcodeSourceTests {
             roots: [root], runner: Self.noSelection, defaults: defaults()
         ).map(\.name)
 
-        #expect(found == ["Xcode", "Xcode Preview", "XcodeBeta"])
+        #expect(found == ["Xcode", "Xcode-beta"])
     }
 
     @Test("The xcode-select target outside the searched folders is listed first")
@@ -335,7 +335,7 @@ struct XcodeActiveTests {
     func choiceRoundTrip() throws {
         let file = choiceFile()
         defer { try? FileManager.default.removeItem(at: file) }
-        let bundle = URL(filePath: "/Applications/Xcode Preview.app", directoryHint: .isDirectory)
+        let bundle = URL(filePath: "/Applications/Xcode-beta.app", directoryHint: .isDirectory)
 
         try XcodeSource.setChoice(bundle, file: file)
         #expect(XcodeSource.readChoice(file: file) == bundle)
@@ -390,7 +390,7 @@ struct XcodeActiveTests {
     @Test("A copy that carries the tool is preferred")
     func toolPreferred() {
         let toolless = Self.install("/Applications/Xcode.app", hasTool: false, origin: .selected)
-        let usable = Self.install("/Applications/Xcode Preview.app", hasTool: true, origin: .found)
+        let usable = Self.install("/Applications/Xcode-beta.app", hasTool: true, origin: .found)
 
         #expect(
             XcodeSource.activeBundle(installs: [toolless, usable], file: choiceFile()) == usable
@@ -402,7 +402,7 @@ struct XcodeActiveTests {
     @Test("With no tool anywhere the first system copy is the display")
     func displayFallback() {
         let first = Self.install("/Applications/Xcode.app", hasTool: false, origin: .found)
-        let second = Self.install("/Applications/Xcode Preview.app", hasTool: false, origin: .found)
+        let second = Self.install("/Applications/Xcode-beta.app", hasTool: false, origin: .found)
 
         #expect(
             XcodeSource.activeBundle(installs: [first, second], file: choiceFile()) == first

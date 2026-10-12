@@ -74,6 +74,64 @@ struct DeploymentContentTests {
         #expect(throws: (any Error).self) { try DeploymentContent.inspect(files: files, bundled: build, installed: build) }
     }
 
+    // A bundle-shaped source: two regular files in a tree, the shape of notify.app.
+    private func bundleFile(in root: URL) throws -> DeploymentContent.File {
+        let source = root.appending(path: "notify.app")
+        let destination = root.appending(path: "installed.app")
+        let fm = FileManager.default
+        for name in ["Contents/MacOS/notify", "Contents/Info.plist"] {
+            try fm.createDirectory(at: source.appending(path: name).deletingLastPathComponent(),
+                                   withIntermediateDirectories: true)
+            try Data("bundle:\(name)".utf8).write(to: source.appending(path: name))
+        }
+        return .init(source: source, destination: destination, name: "notify.app")
+    }
+
+    @Test("A bundle is compared file by file, so any change is a mismatch")
+    func bundleMatchesFileByFile() throws {
+        let root = try scratchDirectory("content-bundle")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = try bundleFile(in: root)
+        let fm = FileManager.default
+
+        // Nothing installed yet.
+        #expect(try !file.matches())
+
+        // An identical copy matches.
+        try fm.copyItem(at: file.source, to: file.destination)
+        #expect(try file.matches())
+
+        // A changed file, a missing file, and an extra file each break the match.
+        let executable = file.destination.appending(path: "Contents/MacOS/notify")
+        try Data("tampered".utf8).write(to: executable)
+        #expect(try !file.matches())
+        try Data("bundle:Contents/MacOS/notify".utf8).write(to: executable)
+        #expect(try file.matches())
+
+        let plist = file.destination.appending(path: "Contents/Info.plist")
+        try fm.removeItem(at: plist)
+        #expect(try !file.matches())
+        try Data("bundle:Contents/Info.plist".utf8).write(to: plist)
+        #expect(try file.matches())
+
+        try Data("stray".utf8).write(to: file.destination.appending(path: "Contents/extra"))
+        #expect(try !file.matches())
+
+        // A file standing in for the bundle is not a match.
+        try fm.removeItem(at: file.destination)
+        try Data("a file, not a bundle".utf8).write(to: file.destination)
+        #expect(try !file.matches())
+    }
+
+    @Test("A missing bundled bundle is an error rather than a mismatch")
+    func missingBundleSource() throws {
+        let root = try scratchDirectory("content-bundle-missing")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = try bundleFile(in: root)
+        try FileManager.default.removeItem(at: file.source)
+        #expect(throws: (any Error).self) { try file.matches() }
+    }
+
     @Test("A matching script without execute permission still needs repair")
     func executablePermission() throws {
         let root = try scratchDirectory("content")

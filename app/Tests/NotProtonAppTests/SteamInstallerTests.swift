@@ -42,6 +42,14 @@ struct SteamInstallerTests {
 
         let appinfo = root.appending(path: "appinfo")
         try FileManager.default.copyItem(at: dylib, to: appinfo)
+
+        // A bundle, not a file: deployed whole and compared directory by directory.
+        let notifyExecutable = root.appending(path: "notify.app/Contents/MacOS/notify")
+        try FileManager.default.createDirectory(at: notifyExecutable.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: dylib, to: notifyExecutable)
+        try Data("<plist/>".utf8).write(to: root.appending(path: "notify.app/Contents/Info.plist"))
+
         try Data("#!/bin/sh\nexit 0\n".utf8).write(to: root.appending(path: "run"))
         try Data("100\n".utf8).write(to: root.appending(path: "build-time"))
 
@@ -63,6 +71,7 @@ struct SteamInstallerTests {
         var overlayShim: URL { support.appending(path: "overlay-shim.dylib") }
         var iconmaker: URL { support.appending(path: "iconmaker") }
         var appinfo: URL { support.appending(path: "appinfo") }
+        var notifyApp: URL { support.appending(path: "notify.app") }
         var deployedVersion: URL { support.appending(path: "dylib.version") }
         var backups: URL { support.appending(path: "backups") }
         var bridge: URL { support.appending(path: "bridge") }
@@ -106,6 +115,7 @@ struct SteamInstallerTests {
             overlayShim: fixture.overlayShim,
             iconmaker: fixture.iconmaker,
             appinfo: fixture.appinfo,
+            notifyApp: fixture.notifyApp,
             deployedVersion: fixture.deployedVersion,
             backups: fixture.backups,
             compatTools: fixture.work.appending(path: "compatibilitytools.d"),
@@ -534,7 +544,8 @@ struct SteamInstallerTests {
         let files = DeploymentContent.files(payload: fixture.payload, bridgePayload: bridge, app: fixture.app,
                                             bridge: fixture.bridge, signatures: fixture.signatures,
                                             overlayShim: fixture.overlayShim, iconmaker: fixture.iconmaker,
-                                            appinfo: fixture.appinfo, compatTools: work.appending(path: "compatibilitytools.d"),
+                                            appinfo: fixture.appinfo, notifyApp: fixture.notifyApp,
+                                            compatTools: work.appending(path: "compatibilitytools.d"),
                                             tools: tools, runners: runners)
         #expect(try files.allSatisfy { try $0.matches() })
     }
