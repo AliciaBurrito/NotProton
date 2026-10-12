@@ -60,6 +60,17 @@ enum AppLog {
             lines.append("state payload manifest problem: \(problem)")
         }
 
+        if snapshot.gameMode.xcodes.isEmpty {
+            lines.append("state xcode=none found")
+        }
+        for install in snapshot.gameMode.xcodes {
+            lines.append(
+                "state xcode \(install.name) version=\(install.version ?? "unknown") "
+                    + (install.hasTool ? "tool=present" : "tool=missing")
+                    + (snapshot.gameMode.xcode == install ? " active" : "")
+                    + " at=\(install.bundle.path(percentEncoded: false))"
+            )
+        }
         lines.append("state gameMode \(describe(snapshot.gameMode))")
 
         for line in lines { note(line) }

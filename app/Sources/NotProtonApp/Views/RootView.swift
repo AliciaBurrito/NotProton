@@ -2,9 +2,9 @@ import SwiftUI
 
 enum Pane: String, CaseIterable, Identifiable, Hashable {
     case status
+    case enhancements
     case prefixes
     case backups
-    case enhancements
 
     var id: String { rawValue }
 

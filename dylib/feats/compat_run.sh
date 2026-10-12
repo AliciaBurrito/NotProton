@@ -1362,8 +1362,12 @@ trap terminate TERM INT HUP
 # an absent file means enabled, and NOTPROTON_GAMEMODE overrides it for testing.
 gamemode_cfg="$HOME/Library/Application Support/notproton/gamemode"
 gamemode_sessions="$HOME/Library/Application Support/notproton/gamemode-sessions"
+# The copy of Xcode the app was pointed at with Set Up; an absent file falls
+# back to xcode-select and then to the Applications folders.
+gamemode_choice="$HOME/Library/Application Support/notproton/xcode-active"
 gamemode_on=0
 gamemode_session=""
+gamemode_tool=""
 
 gamemode_feature_on() {
   case "${NOTPROTON_GAMEMODE:-}" in
@@ -1376,9 +1380,38 @@ gamemode_feature_on() {
   esac
 }
 
-# xcrun reports the missing utility and fails, so one test covers no Xcode at all
-gamemode_tool_ok() {
-  command -v xcrun >/dev/null 2>&1 && xcrun -f gamepolicyctl >/dev/null 2>&1
+# A copy of Xcode is usable when it still ships gamepolicyctl, which the older
+# releases lack, so the check is on the tool rather than on the bundle alone.
+gamemode_tool_in() {
+  [ -x "$1/Contents/Developer/usr/bin/gamepolicyctl" ] &&
+    printf '%s' "$1/Contents/Developer/usr/bin/gamepolicyctl"
+}
+
+# The gamepolicyctl to run: the copy the user chose in the app, then whatever
+# xcode-select points at, then the first Xcode in an Applications folder. A
+# candidate without the tool is skipped, so a choice whose copy was removed or
+# downgraded falls through instead of failing the launch.
+gamemode_resolve_tool() {
+  if [ -f "$gamemode_choice" ]; then
+    candidate="$(head -n 1 "$gamemode_choice" 2>/dev/null | tr -d ' \t')"
+    if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+      gamemode_tool_in "$candidate" && return 0
+    fi
+  fi
+  candidate="$(xcode-select -p 2>/dev/null)" || candidate=""
+  case "$candidate" in
+    */Contents/Developer) candidate="${candidate%/Contents/Developer}" ;;
+  esac
+  if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+    gamemode_tool_in "$candidate" && return 0
+  fi
+  for folder in /Applications "$HOME/Applications"; do
+    for candidate in "$folder"/Xcode*.app; do
+      [ -d "$candidate" ] || continue
+      gamemode_tool_in "$candidate" && return 0
+    done
+  done
+  return 1
 }
 
 # Escapes a string for use as an AppleScript literal
@@ -1410,13 +1443,13 @@ gamemode_activate() {
     echo "=== game mode: feature is off, leaving the policy alone ===" >> "$log" 2>&1 || true
     return 0
   fi
-  if ! gamemode_tool_ok; then
+  if ! gamemode_tool=$(gamemode_resolve_tool); then
     echo "=== game mode: gamepolicyctl not found, install Xcode to use it ===" >> "$log" 2>&1 || true
     return 0
   fi
   mkdir -p "$gamemode_sessions" 2>/dev/null || true
 
-  current=$(xcrun gamepolicyctl game-mode status 2>/dev/null | sed 's/\033\[[0-9;]*m//g') || current=""
+  current=$("$gamemode_tool" game-mode status 2>/dev/null | sed 's/\033\[[0-9;]*m//g') || current=""
   will_off=0
   case "$current" in
     *"will soon turn off"*) will_off=1 ;;
@@ -1424,7 +1457,7 @@ gamemode_activate() {
   case "$current" in
     *"is on"*)
       # Already on, so nothing to say; pinning a soon-to-expire one keeps it up.
-      if [ "$will_off" = 1 ] && xcrun gamepolicyctl game-mode set on >> "$log" 2>&1; then
+      if [ "$will_off" = 1 ] && "$gamemode_tool" game-mode set on >> "$log" 2>&1; then
         gamemode_on=1
         gamemode_session="$gamemode_sessions/$app_id-$$"
         : > "$gamemode_session" 2>/dev/null || gamemode_on=0
@@ -1432,7 +1465,7 @@ gamemode_activate() {
       fi
       ;;
     *)
-      if xcrun gamepolicyctl game-mode set on >> "$log" 2>&1; then
+      if "$gamemode_tool" game-mode set on >> "$log" 2>&1; then
         echo "=== game mode: set on (was off) ===" >> "$log" 2>&1 || true
         gamemode_session="$gamemode_sessions/$app_id-$$"
         if : > "$gamemode_session" 2>/dev/null; then
@@ -1475,7 +1508,7 @@ gamemode_release() {
     break
   done
   if [ -z "$last" ]; then
-    xcrun gamepolicyctl game-mode set auto >> "$log" 2>&1 || true
+    "$gamemode_tool" game-mode set auto >> "$log" 2>&1 || true
     echo "=== game mode: last session ended, back to automatic ===" >> "$log" 2>&1 || true
   fi
   return 0

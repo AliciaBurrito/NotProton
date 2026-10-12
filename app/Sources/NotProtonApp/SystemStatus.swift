@@ -88,6 +88,7 @@ final class SystemStatus {
         case toolUnlicensed
         case removeBuild
         case removeEverything
+        case removeXcode
 
         var id: Self { self }
     }
@@ -311,6 +312,88 @@ final class SystemStatus {
         await refresh()
     }
 
+    func addXcode() async {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.prompt = "Add"
+        panel.message = "Select a copy of Xcode."
+        panel.directoryURL = URL(filePath: "/Applications", directoryHint: .isDirectory)
+
+        guard panel.runModal() == .OK, let picked = panel.url else { return }
+
+        feedbackPane = .enhancements
+        clearFailure()
+        outcome = nil
+
+        let name = picked.deletingPathExtension().lastPathComponent
+        // The tool is the only thing NotProton takes from the bundle, so its
+        // absence is a pop-up, not a row: the pick looks like Xcode and the
+        // page has no highlight to point at.
+        guard XcodeSource.hasTool(inBundle: picked) else {
+            let alert = NSAlert()
+            alert.messageText = "\(name) is not a usable copy of Xcode."
+            alert.informativeText = "NotProton drives Game Mode through gamepolicyctl, which "
+                + "lives inside the copy. It may be older than the tool or incomplete."
+            alert.runModal()
+            AppLog.note("xcode choice refused: \(picked.path(percentEncoded: false))")
+            return
+        }
+
+        await refresh()
+        if snapshot?.gameMode.xcodes.contains(where: { XcodeSource.same($0.bundle, picked) }) == true {
+            AppLog.note("xcode already listed: \(picked.path(percentEncoded: false))")
+            outcome = "\(name) is already listed."
+            return
+        }
+        XcodeSource.addManualBundle(picked)
+        AppLog.note("xcode added: \(picked.path(percentEncoded: false))")
+        await refresh()
+        outcome = "\(name) was added to the list."
+    }
+
+    func setUpXcode(_ install: XcodeInstall) async {
+        await perform(
+            from: "Setting up \(install.name)",
+            pane: .enhancements
+        ) { _ in
+            try await Task.detached(priority: .userInitiated) {
+                try XcodeSource.setChoice(install.bundle)
+            }.value
+            return "\(install.name) will now be used for Game Mode."
+        }
+    }
+
+    private(set) var pendingXcodeRemoval: URL?
+
+    func requestXcodeRemoval(_ bundle: URL) {
+        pendingXcodeRemoval = bundle
+        pendingConfirmation = .removeXcode
+    }
+
+    func cancelXcodeRemoval() {
+        pendingXcodeRemoval = nil
+    }
+
+    func removePendingXcode() async {
+        guard let bundle = pendingXcodeRemoval else { return }
+        pendingXcodeRemoval = nil
+        guard isIdle else { return }
+        clearFailure()
+        outcome = nil
+        XcodeSource.removeManualBundle(bundle)
+        // A recorded choice that pointed at the removed copy is stale, so the
+        // derivation falls back to the system's Xcode.
+        if let choice = try? XcodeSource.readChoice(), XcodeSource.same(choice, bundle) {
+            try? XcodeSource.clearChoice()
+            AppLog.note("xcode choice cleared with its copy: \(bundle.path(percentEncoded: false))")
+        }
+        AppLog.note("xcode removed from list: \(bundle.path(percentEncoded: false))")
+        await refresh()
+    }
+
     private static let toolsRestartHint = "Restart Steam to update its list of compatibility tools."
 
     private func runnerOutcome(_ result: RunnerSetup.Outcome) -> String {
@@ -484,9 +567,9 @@ final class SystemStatus {
 
             // Turning the feature off returns the live policy to automatic, so a
             // forced-on Game Mode stops being forced as soon as the user asks.
-            if !enabled {
+            if !enabled, let tool = snapshot?.gameMode.xcode?.toolURL {
                 _ = try? await Task.detached(priority: .userInitiated) {
-                    try GamePolicyCtl.set("auto")
+                    try GamePolicyCtl.set("auto", tool: tool)
                 }.value
             }
 

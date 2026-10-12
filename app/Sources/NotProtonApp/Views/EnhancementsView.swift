@@ -27,11 +27,36 @@ struct EnhancementsView: View {
             }
         }
         .task { if status.snapshot == nil { await status.refresh() } }
+        .confirmationDialog(
+            status.pendingXcodeRemoval.map {
+                "Remove \($0.deletingPathExtension().lastPathComponent) from the list?"
+            } ?? "",
+            isPresented: asking(.removeXcode),
+            titleVisibility: .visible
+        ) {
+            Button("Remove Copy", role: .destructive) {
+                Task { await status.removePendingXcode() }
+            }
+            Button("Cancel", role: .cancel) { status.cancelXcodeRemoval() }
+        } message: {
+            Text("Xcode itself is not removed.")
+        }
     }
 
     // Only show feedback generated for this page (the Game Mode feedback), so
     // Status-page feedback (e.g. "Steam client updates are blocked") stays on Status.
     private var showsFeedback: Bool { status.feedbackPane == .enhancements }
+
+    private func asking(_ confirmation: SystemStatus.Confirmation) -> Binding<Bool> {
+        Binding(
+            get: { status.pendingConfirmation == confirmation },
+            set: { shown in
+                if !shown, status.pendingConfirmation == confirmation {
+                    status.pendingConfirmation = nil
+                }
+            }
+        )
+    }
 
     private func form(_ snapshot: StatusSnapshot) -> some View {
         Form {
@@ -76,24 +101,24 @@ struct EnhancementsView: View {
     @ViewBuilder
     private func gameModeSection(_ state: GameModeState) -> some View {
         Section {
-            xcodeRow(state)
+            xcodeRows(state)
             gameModeToggleRow(state)
             currentGameModeRow(state)
         } header: {
             Text("Game Mode")
+        } footer: {
+            HStack {
+                Spacer()
+                Button("Add Xcode\u{2026}") { Task { await status.addXcode() } }
+                    .disabled(!status.isIdle)
+                    .help("Add a copy of Xcode from another folder.")
+            }
         }
     }
 
     @ViewBuilder
-    private func xcodeRow(_ state: GameModeState) -> some View {
-        if state.ready {
-            StatusRow(
-                title: "Xcode",
-                value: state.xcodeVersion.map { "Found (\($0))." } ?? "Found.",
-                tone: .ok,
-                detail: state.xcode?.path(percentEncoded: false)
-            )
-        } else {
+    private func xcodeRows(_ state: GameModeState) -> some View {
+        if state.xcodes.isEmpty {
             StatusRow(
                 title: "Xcode",
                 value: "Not found.",
@@ -103,10 +128,70 @@ struct EnhancementsView: View {
                     label: "Get Xcode",
                     isProminent: true,
                 ) {
-                    NSWorkspace.shared.open(GameModeSource.appStoreURL)
+                    NSWorkspace.shared.open(XcodeSource.appStoreURL)
                 }
             )
+        } else {
+            ForEach(state.xcodes) { install in
+                xcodeRow(install, state)
+            }
         }
+    }
+
+    private func xcodeRow(_ install: XcodeInstall, _ state: GameModeState) -> some View {
+        StatusRow(
+            title: install.name,
+            value: xcodeRowValue(install, state),
+            tone: xcodeRowTone(install, state),
+            detail: install.bundle.path(percentEncoded: false),
+            action: xcodeRowAction(install, state),
+            menu: xcodeRowMenu(install)
+        )
+    }
+
+    private func xcodeRowValue(_ install: XcodeInstall, _ state: GameModeState) -> String {
+        var value = install.version.map { "Version \($0)" } ?? "Version unknown"
+        if state.xcode == install {
+            value += ", in use"
+        }
+        if !install.hasTool {
+            value += ", no gamepolicyctl"
+        }
+        return value
+    }
+
+    private func xcodeRowTone(_ install: XcodeInstall, _ state: GameModeState) -> StatusTone {
+        if !install.hasTool { return .warning }
+        if state.xcode == install { return .ok }
+        return .neutral
+    }
+
+    private func xcodeRowAction(_ install: XcodeInstall, _ state: GameModeState) -> StatusAction? {
+        guard install.hasTool, state.xcode != install else { return nil }
+        return StatusAction(
+            label: "Set Up",
+            isProminent: true,
+            help: "Use \(install.name) for Game Mode.",
+            isEnabled: status.isIdle
+        ) { Task { await status.setUpXcode(install) } }
+    }
+
+    private func xcodeRowMenu(_ install: XcodeInstall) -> [StatusAction] {
+        var items: [StatusAction] = [
+            StatusAction(label: "Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([install.bundle])
+            }
+        ]
+        if install.origin == .manual {
+            items.append(StatusAction(
+                label: "Remove Copy\u{2026}",
+                role: .destructive,
+                help: "Remove \(install.name) from the list.",
+                isEnabled: status.isIdle,
+                startsGroup: true
+            ) { status.requestXcodeRemoval(install.bundle) })
+        }
+        return items
     }
 
     private func gameModeToggleRow(_ state: GameModeState) -> some View {

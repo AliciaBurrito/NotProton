@@ -37,6 +37,11 @@ enum SupportPaths {
     // game launch touches the policy, so the app and the client agree on it.
     static var gameMode: URL { support.appending(path: "gamemode") }
 
+    // The Xcode NotProton uses for Game Mode. The run script reads this file to
+    // find gamepolicyctl, so the app and the client agree on it. An absent file
+    // means the active Xcode is whatever xcode-select (or Applications) provides.
+    static var xcodeActive: URL { support.appending(path: "xcode-active") }
+
     static var packageDownloads: URL {
         home.appending(path: "Library/Caches/\(supportDirName)/valve-packages")
     }

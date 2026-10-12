@@ -23,49 +23,36 @@ enum GameModePolicy: Sendable, Equatable {
 }
 
 struct GameModeState: Sendable, Equatable {
-    var xcode: URL?
-    var xcodeVersion: String?
-    var toolAvailable: Bool
+    var xcodes: [XcodeInstall] = []
+    var xcode: XcodeInstall?
     var onState: GameModeOnState = .unknown
     var policy: GameModePolicy = .unknown
     var featureEnabled: Bool = true
 
-    // The one condition the section's readiness messaging turns on.
-    var ready: Bool { toolAvailable }
+    // The one condition the section's readiness messaging turns on: the Xcode
+    // this state settled on actually carries gamepolicyctl.
+    var ready: Bool { xcode?.hasTool == true }
 
-    static let neutral = GameModeState(
-        xcode: nil,
-        xcodeVersion: nil,
-        toolAvailable: false
-    )
+    static let neutral = GameModeState()
 }
 
-// Runs xcrun and hands its result on. Injectable so tests never touch the
-// machine's real developer directory.
-typealias XcrunRunner = @Sendable ([String]) throws -> CommandResult
+// Runs an executable with arguments and hands its result on. Injectable so
+// tests never touch the machine's real Xcode or developer tools.
+typealias CommandRunner = @Sendable (String, [String]) throws -> CommandResult
 
+// Runs gamepolicyctl from a chosen Xcode bundle. The tool lives at
+// Contents/Developer/usr/bin/gamepolicyctl in the bundle and runs without
+// admin credentials, so no xcrun and no DEVELOPER_DIR are needed.
 enum GamePolicyCtl {
 
-    static let xcrunPath = "/usr/bin/xcrun"
-
-    static let run: XcrunRunner = { arguments in
-        try Shell.run(xcrunPath, arguments)
+    static let run: CommandRunner = { executable, arguments in
+        try Shell.run(executable, arguments)
     }
 
-    // The full path of gamepolicyctl, or nil when Xcode is not installed.
-    // xcrun is the resolver the rest of the ecosystem agrees on, and -f only
-    // resolves, so this is a cheap readiness probe.
-    static func locate(runner: XcrunRunner = run) -> String? {
-        guard let result = try? runner(["-f", "gamepolicyctl"]), result.succeeded
-        else { return nil }
-        let path = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path.isEmpty ? nil : path
-    }
-
-    static func status(runner: XcrunRunner = run) throws
+    static func status(tool: URL, runner: CommandRunner = run) throws
         -> (onState: GameModeOnState, policy: GameModePolicy)
     {
-        let result = try runner(["gamepolicyctl", "game-mode", "status"])
+        let result = try runner(tool.path(percentEncoded: false), ["game-mode", "status"])
         guard result.succeeded else {
             throw CommandFailure(
                 command: "gamepolicyctl",
@@ -76,8 +63,8 @@ enum GamePolicyCtl {
         return parse(status: result.stdout)
     }
 
-    static func set(_ policy: String, runner: XcrunRunner = run) throws {
-        let result = try runner(["gamepolicyctl", "game-mode", "set", policy])
+    static func set(_ policy: String, tool: URL, runner: CommandRunner = run) throws {
+        let result = try runner(tool.path(percentEncoded: false), ["game-mode", "set", policy])
         guard result.succeeded else {
             throw CommandFailure(
                 command: "gamepolicyctl",
@@ -159,85 +146,27 @@ enum GameModeFeature {
     }
 }
 
-// Finds Xcode and gathers the state the status page presents.
+// Gathers the state the status page presents: every Xcode found, the one
+// this machine settles on, and the live policy when the tool can run.
 enum GameModeSource {
 
-    static let xcodePrefix = "Xcode"
-
-    // The page this leads to when Xcode is missing.
-    static let appStoreURL = URL(
-        string: "https://apps.apple.com/us/app/xcode/id497799835?mt=12"
-    )!
-
-    static let searchRoots: [URL] = [
-        URL(filePath: "/Applications", directoryHint: .isDirectory),
-        SupportPaths.home.appending(path: "Applications", directoryHint: .isDirectory),
-    ]
-
-    // Like the CrossOver search: standard locations, matched on the name prefix.
-    static func discover(roots: [URL] = searchRoots) -> [URL] {
-        let files = FileManager.default
-        var found: [URL] = []
-        var seen: Set<String> = []
-
-        for root in roots {
-            let entries = (try? files.contentsOfDirectory(
-                at: root, includingPropertiesForKeys: nil
-            )) ?? []
-            for entry in entries {
-                guard entry.pathExtension == "app",
-                      entry.deletingPathExtension().lastPathComponent.hasPrefix(xcodePrefix)
-                else { continue }
-                let key = entry.standardizedFileURL.path(percentEncoded: false)
-                guard seen.insert(key).inserted else { continue }
-                found.append(entry)
-            }
-        }
-        return found.sorted { $0.lastPathComponent < $1.lastPathComponent }
-    }
-
-    // xcode-select names the active developer directory, which is how an
-    // Xcode installed somewhere other than the Applications folder is still
-    // found. A Command Line Tools directory has no gamepolicyctl, so it is
-    // not an answer here.
-    static func activeXcode(runner: XcrunRunner = GamePolicyCtl.run) -> URL? {
-        guard let result = try? runner(["-p"]), result.succeeded else { return nil }
-        let directory = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard directory.hasSuffix("/Contents/Developer") else { return nil }
-        // Deleting path components would leave a trailing slash in the URL,
-        // so the suffix just checked for comes off the string instead.
-        let bundle = URL(filePath: String(directory.dropLast("/Contents/Developer".count)))
-        guard FileManager.default.fileExists(atPath: bundle.path(percentEncoded: false)),
-              bundle.pathExtension == "app"
-        else { return nil }
-        return bundle
-    }
-
-    static func version(of bundle: URL) -> String? {
-        let plist = bundle.appending(path: "Contents/Info.plist")
-        guard let data = try? Data(contentsOf: plist),
-              let object = try? PropertyListSerialization.propertyList(from: data, format: nil),
-              let dict = object as? [String: Any]
-        else { return nil }
-        return dict["CFBundleShortVersionString"] as? String
-    }
-
     static func capture(
-        roots: [URL] = searchRoots,
-        runner: XcrunRunner = GamePolicyCtl.run,
+        roots: [URL] = XcodeSource.searchRoots,
+        runner: CommandRunner = GamePolicyCtl.run,
+        choiceFile: URL = SupportPaths.xcodeActive,
         featureFile: URL = GameModeFeature.file
     ) -> GameModeState {
-        let xcode = activeXcode(runner: runner) ?? discover(roots: roots).first
+        let xcodes = XcodeSource.discover(roots: roots, runner: runner)
+        let active = XcodeSource.activeBundle(installs: xcodes, file: choiceFile)
 
         var state = GameModeState(
-            xcode: xcode,
-            xcodeVersion: xcode.flatMap(version(of:)),
-            toolAvailable: GamePolicyCtl.locate(runner: runner) != nil,
+            xcodes: xcodes,
+            xcode: active,
             featureEnabled: GameModeFeature.isEnabled(file: featureFile)
         )
 
-        if state.ready {
-            if let (onState, policy) = try? GamePolicyCtl.status(runner: runner) {
+        if let tool = active?.toolURL {
+            if let (onState, policy) = try? GamePolicyCtl.status(tool: tool, runner: runner) {
                 state.onState = onState
                 state.policy = policy
             }
