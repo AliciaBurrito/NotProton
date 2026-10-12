@@ -232,9 +232,7 @@ struct StatusView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(
-                String(localized: "Steam is restored to its unmodified state and NotProton is removed, including the compatibility tool that lives inside the Steam folder. Windows games and Steam Play prefixes are not removed.")
-            )
+            Text(Uninstall.confirmation())
         }
         .confirmationDialog(
             CrossOverLicense.notActivatedTitle,
@@ -315,6 +313,15 @@ struct StatusView: View {
             }
 
             Section("Steam") {
+                StatusRow(
+                    title: String(localized: "Location"),
+                    value: SupportPaths.Steam.app.path(percentEncoded: false),
+                    action: StatusAction(
+                        label: String(localized: "Choose\u{2026}"),
+                        help: String(localized: "Use a copy of Steam from another folder or drive."),
+                        isEnabled: status.isIdle
+                    ) { Task { await status.chooseSteam() } }
+                )
                 steamRow(snapshot.steam, payload: snapshot.payload)
                 if snapshot.steamRunning {
                     StatusRow(

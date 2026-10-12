@@ -50,7 +50,12 @@ enum SteamRepair {
         updateBlocks: [URL] = UpdateBlock.paths,
         backups: URL = SupportPaths.backups,
         downloads: URL = SupportPaths.packageDownloads,
-        report: @Sendable (RepairPhase) -> Void = { _ in }
+        modifications: SteamModifications = .shared,
+        stopClient: SteamInstaller.ClientStopper = { app, onStopping in
+            try SteamBundle.stopClient(app: app, step: String(localized: "Repair Steam"), onStopping: onStopping)
+        },
+        register: SteamInstaller.BundleRegistrar = { SteamBundle.register($0) },
+        report: @escaping @Sendable (RepairPhase) -> Void = { _ in }
     ) async throws -> RepairOutcome {
         let manifest = try suppliedManifest ?? ValvePackageManifest.bundled()
         guard let bundle = manifest.bundle else {
@@ -65,19 +70,11 @@ enum SteamRepair {
         report(.checking)
         try verifyValveSignature(staged)
 
-        let stopped = try SteamBundle.stopClient(app: app, step: step) { report(.stoppingClient) }
+        let stopped = try stopClient(app) { report(.stoppingClient) }
 
+        try modifications.prepare()
         report(.replacing)
         try replace(app, with: staged)
-
-        report(.clearingInsert)
-        let clearedInner = try clearInsert(at: innerPlist)
-
-        report(.removingUpdateBlock)
-        let removed = try UpdateBlock.remove(from: updateBlocks)
-
-        report(.registering)
-        SteamBundle.register(app)
 
         try verifyValveSignature(app)
         let plist = app.appending(path: "Contents/Info.plist")
@@ -88,6 +85,17 @@ enum SteamRepair {
                 detail: String(localized: "Steam could not be fully restored. Please run Repair Steam again.")
             )
         }
+
+        _ = try modifications.retireIfClean(app)
+
+        report(.clearingInsert)
+        let clearedInner = try clearInsert(at: innerPlist)
+
+        report(.removingUpdateBlock)
+        let removed = try UpdateBlock.remove(from: updateBlocks)
+
+        report(.registering)
+        register(app)
 
         let removedBackup = try removeStaleBackup(from: backups)
 
@@ -178,12 +186,30 @@ enum SteamRepair {
     static func replace(_ app: URL, with staged: URL) throws {
         let files = FileManager.default
         try WriteRefused.catching(app) {
+            var staged = staged
+            let folder = app.deletingLastPathComponent()
+            if volume(of: staged) != volume(of: folder) {
+                let copy = folder.appending(path: ".\(app.lastPathComponent).\(UUID().uuidString)")
+                do {
+                    try files.copyItem(at: staged, to: copy)
+                } catch {
+                    try? files.removeItem(at: copy)
+                    throw error
+                }
+                staged = copy
+            }
+            defer { try? files.removeItem(at: staged) }
+
             guard files.fileExists(atPath: app.path(percentEncoded: false)) else {
                 try files.moveItem(at: staged, to: app)
                 return
             }
             _ = try files.replaceItemAt(app, withItemAt: staged)
         }
+    }
+
+    private static func volume(of url: URL) -> URL? {
+        try? url.resourceValues(forKeys: [.volumeURLKey]).volume
     }
 
     static func clearInsert(at plist: URL) throws -> Bool {

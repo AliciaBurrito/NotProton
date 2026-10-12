@@ -66,6 +66,8 @@ enum SteamInstaller {
         backups: URL = SupportPaths.backups,
         compatTools: URL = SupportPaths.Steam.compatTools,
         holdingInstallationLock: Bool = false,
+        lockFolder: URL = SupportPaths.applicationSupport,
+        modifications: SteamModifications = .shared,
         runnerIsRunning: @Sendable (URL) -> Bool = { RunnerInstaller.isRunning(from: $0) },
         verifyRunner: (RunnerBuild, URL) throws -> Void = RunnerInstaller.verifyClone,
         patchRunner: (RunnerBuild, URL, URL) throws -> Void = { build, root, bridge in
@@ -86,8 +88,9 @@ enum SteamInstaller {
         let dylib = app.appending(path: "Contents/MacOS/\(SupportPaths.dylibName)")
         try assertBundleIsPresent(app)
         try assertInsertIsDeployedOrAbsent(at: plist, dylib: dylib)
-        let installationLock = holdingInstallationLock ? -1 : try DeploymentContent.acquireInstallationLock(for: app)
-        defer { if installationLock >= 0 { FileLock.release(installationLock) } }
+        let installationLock = holdingInstallationLock
+            ? nil : try DeploymentContent.acquireInstallationLock(in: lockFolder, steamFolder: app.deletingLastPathComponent())
+        defer { installationLock?.release() }
         guard let dylibHashes = try MachOBuild.hashesIgnoringSignature(of: payload.dylib) else {
             throw StepFailure(step: step, detail: String(localized: "The bundled NotProton dylib is invalid."))
         }
@@ -117,6 +120,7 @@ enum SteamInstaller {
         for build in builds {
             try verifyRunner(build, SupportPaths.clonedRoot(forBuild: build.id, runners: runners))
         }
+        try modifications.mark(app)
         let patching = try needsPatching(plist: plist, dylib: dylib, shipping: payload.dylib, app: app)
         let replacingFiles = try files.contains {
             try $0.needsClientStopped && !$0.matches() && FileManager.default.fileExists(atPath: $0.destination.path(percentEncoded: false))
