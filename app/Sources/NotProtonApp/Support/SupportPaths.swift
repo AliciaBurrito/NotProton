@@ -33,16 +33,13 @@ enum SupportPaths {
     static var iconmaker: URL { support.appending(path: "iconmaker") }
     static var appinfo: URL { support.appending(path: "appinfo") }
 
-    // The Game Mode notification helper, a bundle so it can carry the app icon.
+    // The Game Mode notification helper, a bundle so it can carry the app icon
     static var notifyApp: URL { support.appending(path: "notify.app") }
 
-    // The Game Mode toggle. The run script reads this file to decide whether a
-    // game launch touches the policy, so the app and the client agree on it.
+    // Shared Game Mode toggle state used by both the app and the run script
     static var gameMode: URL { support.appending(path: "gamemode") }
 
-    // The Xcode NotProton uses for Game Mode. The run script reads this file to
-    // find gamepolicyctl, so the app and the client agree on it. An absent file
-    // means the active Xcode is whatever xcode-select (or Applications) provides.
+    // Active Xcode path for Game Mode. Defaults to xcode-select if absent
     static var xcodeActive: URL { support.appending(path: "xcode-active") }
 
     static var packageDownloads: URL {

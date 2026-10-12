@@ -1261,9 +1261,8 @@ $icon_arg
 </plist>
 PLIST
 
-# Stages the wine tree inside the bundle so macOS treats the launcher as a real
-# app with a dock tile. (macOS Game Mode itself is handled by gamepolicyctl,
-# further down, because this staging no longer triggers it on its own.)
+# Stages the wine tree inside the bundle so macOS treats the launcher as a
+# real app with a dock tile
 for f in "$wine_unix"/*; do
   [ -e "$f" ] || continue
   base=${f##*/}
@@ -1355,11 +1354,8 @@ terminate() {
 }
 trap terminate TERM INT HUP
 
-# macOS Game Mode: force it on while a game runs and return it to automatic when
-# the last session ends. The only way to control Game Mode is gamepolicyctl, which
-# ships with Xcode, and it runs without admin credentials, so none of this asks
-# the user for anything. The NotProton app's Game Mode toggle writes gamemode_cfg;
-# an absent file means enabled, and NOTPROTON_GAMEMODE overrides it for testing.
+# Game Mode during gameplay. Reverts to automatic when done. Runs without # admin privileges. Configured via gamemode_cfg (defaults to enabled) or 
+# NOTPROTON_GAMEMODE for testing
 gamemode_cfg="$HOME/Library/Application Support/notproton/gamemode"
 gamemode_sessions="$HOME/Library/Application Support/notproton/gamemode-sessions"
 # The copy of Xcode the app was pointed at with Set Up; an absent file falls
@@ -1380,17 +1376,15 @@ gamemode_feature_on() {
   esac
 }
 
-# A copy of Xcode is usable when it still ships gamepolicyctl, which the older
-# releases lack, so the check is on the tool rather than on the bundle alone.
+# Verifies Xcode includes gamepolicyctl
 gamemode_tool_in() {
   [ -x "$1/Contents/Developer/usr/bin/gamepolicyctl" ] &&
     printf '%s' "$1/Contents/Developer/usr/bin/gamepolicyctl"
 }
 
-# The gamepolicyctl to run: the copy the user chose in the app, then whatever
-# xcode-select points at, then the first Xcode in an Applications folder. A
-# candidate without the tool is skipped, so a choice whose copy was removed or
-# downgraded falls through instead of failing the launch.
+# Resolves gamepolicyctl in this order: user choice, xcode-select, or 
+# Applications. Skips invalid Xcode installations to prevent launch
+# failures
 gamemode_resolve_tool() {
   if [ -f "$gamemode_choice" ]; then
     candidate="$(head -n 1 "$gamemode_choice" 2>/dev/null | tr -d ' \t')"
@@ -1419,14 +1413,12 @@ gamemode_escape() {
   printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
-# macOS only posts its own notification when it switched Game Mode on itself, so
-# this one is NotProton's. The notify helper carries the app's icon in its
-# bundle, so it is the preferred poster; without it the banner degrades to the
-# plain system notification. Failing to notify is not a reason to fail the launch.
+# Sends a custom Game Mode notification. Uses the notify helper to display
+# the app icon, falling back to a standard alert if unavailable. 
+# Notification failures are ignored
 gamemode_notify() {
   notify_tool="$np_support/notify.app/Contents/MacOS/notify"
-  if [ -x "$notify_tool" ]; then
-    "$notify_tool" "$1" "$2" >/dev/null 2>&1 || true
+  if [ -x "$notify_tool" ] && "$notify_tool" "$1" "$2" >/dev/null 2>&1; then
     return 0
   fi
   /usr/bin/osascript >/dev/null 2>&1 <<APPLESCRIPT || true
@@ -1434,8 +1426,8 @@ display notification "$(gamemode_escape "$2")" with title "$(gamemode_escape "$1
 APPLESCRIPT
 }
 
-# Called once a game is actually launched. Returns the policy to a stable forced
-# on and records a session marker that the release step counts on.
+# Called on game launch to enforce Game Mode and record the session for 
+# later release
 gamemode_activate() {
   gamemode_on=0
   gamemode_session=""

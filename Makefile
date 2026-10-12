@@ -444,9 +444,7 @@ NOTIFY_APP := $(OUT_DIR)/notify.app
 
 notify: $(NOTIFY_APP)
 
-# The bundle is what carries the icon, so it is built whole here instead of
-# being assembled at run time: the plist and icon come from the tree and the
-# ad-hoc signature is applied once, at build.
+# Builds and signs the complete bundle to include the icon
 $(NOTIFY_APP): helpers/notify/notify.swift helpers/notify/Info.plist icon
 	@rm -rf $@
 	@mkdir -p $@/Contents/MacOS $@/Contents/Resources
@@ -462,7 +460,7 @@ helpers-install: $(ICONMAKER) $(APPINFO) $(NOTIFY_APP)
 	$(call install_atomically,$(APPINFO),$(SUPPORT_DIR)/appinfo)
 	@rm -rf "$(SUPPORT_DIR)/notify.app.new"
 	cp -R $(NOTIFY_APP) "$(SUPPORT_DIR)/notify.app.new"
-	rm -rf "$(SUPPORT_DIR)/notify.app"
+	@rm -rf "$(SUPPORT_DIR)/notify.app"
 	mv -f "$(SUPPORT_DIR)/notify.app.new" "$(SUPPORT_DIR)/notify.app"
 	@echo "==> Installed: $(SUPPORT_DIR)/{iconmaker,appinfo,notify.app}"
 

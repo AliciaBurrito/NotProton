@@ -21,9 +21,8 @@ enum DeploymentContent {
         var executable = false
 
         func matches() throws -> Bool {
-            // A directory source (a bundle such as notify.app) is compared file by
-            // file; a missing source must still surface as an error, so an absent
-            // path falls through to the single-file comparison below.
+            // Validates directories recursively. Missing sources are 
+            // handled by the standard file check below
             var sourceInfo = stat()
             let sourceIsDirectory = lstat(source.path(percentEncoded: false), &sourceInfo) == 0
                 && sourceInfo.st_mode & S_IFMT == S_IFDIR
@@ -43,8 +42,7 @@ enum DeploymentContent {
             return try MachOBuild.matchesIgnoringSignature(source, destination)
         }
 
-        // A bundled directory matches only when the installed copy holds exactly the
-        // same regular files, byte for byte: none may be added, removed, or changed.
+        // Verifies exact byte-for-byte match of installed files
         private func directoryMatches() throws -> Bool {
             var info = stat()
             guard lstat(destination.path(percentEncoded: false), &info) == 0,
@@ -54,16 +52,11 @@ enum DeploymentContent {
             return sourceFiles == destinationFiles
         }
 
-        // Maps each regular file under root to the SHA-256 of its contents, keyed
-        // by its path relative to root. Two trees are equal only when both maps are.
         private func fileDigests(in root: URL) throws -> [String: String] {
             let fm = FileManager.default
             var digests: [String: String] = [:]
-            // Canonicalize the root to the same fully-resolved form the enumerator
-            // yields. URL paths are not resolved (on macOS /var is a symlink to
-            // /private/var), so prefix-stripping with the unresolved form would
-            // corrupt the relative keys and make two identical trees compare
-            // unequal; realpath resolves through the kernel to match the enumerator.
+            // Uses realpath to resolve symlinks (like /var) for accurate 
+            // path matching
             let rawRoot = root.path(percentEncoded: false)
             let rootPath: String
             if let resolved = realpath(rawRoot, nil) {

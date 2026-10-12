@@ -282,8 +282,6 @@ struct StatusView: View {
         )
     }
 
-    // Feedback belongs to the page its action lives on. Status shows everything
-    // generated here (i.e. not the Enhancements page's Game Mode feedback).
     private var showsFeedback: Bool { status.feedbackPane != .enhancements }
 
     private func statusForm(_ snapshot: StatusSnapshot) -> some View {
@@ -755,5 +753,4 @@ struct StatusView: View {
             }
         }
     }
-
 }

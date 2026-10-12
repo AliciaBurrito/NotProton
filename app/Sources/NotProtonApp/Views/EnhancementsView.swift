@@ -1,6 +1,4 @@
 // 'Enhancements' view, see SystemStatus for actual logic
-//
-// The same page chrome as Status, but it only presents the Game Mode options.
 
 import AppKit
 import SwiftUI
@@ -43,8 +41,6 @@ struct EnhancementsView: View {
         }
     }
 
-    // Only show feedback generated for this page (the Game Mode feedback), so
-    // Status-page feedback (e.g. "Steam client updates are blocked") stays on Status.
     private var showsFeedback: Bool { status.feedbackPane == .enhancements }
 
     private func asking(_ confirmation: SystemStatus.Confirmation) -> Binding<Bool> {

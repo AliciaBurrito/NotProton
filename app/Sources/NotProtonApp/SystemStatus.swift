@@ -67,8 +67,7 @@ final class SystemStatus {
     private(set) var failure: String?
     private(set) var failureRemedy: Remedy?
 
-    // The page the current feedback (outcome / failure / activity) belongs to, so each
-    // pane only shows feedback generated for its own controls.
+    // Scopes feedback to the active pane
     private(set) var feedbackPane: Pane?
 
     private var runInFlight = false
@@ -329,9 +328,7 @@ final class SystemStatus {
         outcome = nil
 
         let name = picked.deletingPathExtension().lastPathComponent
-        // The tool is the only thing NotProton takes from the bundle, so its
-        // absence is a pop-up, not a row: the pick looks like Xcode and the
-        // page has no highlight to point at.
+        // Shows an alert if gamepolicyctl is missing from the selected Xcode bundle
         guard XcodeSource.hasTool(inBundle: picked) else {
             let alert = NSAlert()
             alert.messageText = "\(name) is not a usable copy of Xcode."
@@ -384,9 +381,8 @@ final class SystemStatus {
         clearFailure()
         outcome = nil
         XcodeSource.removeManualBundle(bundle)
-        // A recorded choice that pointed at the removed copy is stale, so the
-        // derivation falls back to the system's Xcode.
-        if let choice = try? XcodeSource.readChoice(), XcodeSource.same(choice, bundle) {
+        // Clears the selection if the chosen Xcode instance is removed
+        if let choice = XcodeSource.readChoice(), XcodeSource.same(choice, bundle) {
             try? XcodeSource.clearChoice()
             AppLog.note("xcode choice cleared with its copy: \(bundle.path(percentEncoded: false))")
         }
@@ -565,8 +561,7 @@ final class SystemStatus {
                 try GameModeFeature.setEnabled(enabled)
             }.value
 
-            // Turning the feature off returns the live policy to automatic, so a
-            // forced-on Game Mode stops being forced as soon as the user asks.
+            // Disabling the feature immediately reverts Game Mode to automatic
             if !enabled, let tool = snapshot?.gameMode.xcode?.toolURL {
                 _ = try? await Task.detached(priority: .userInitiated) {
                     try GamePolicyCtl.set("auto", tool: tool)
@@ -575,7 +570,7 @@ final class SystemStatus {
 
             return enabled
                 ? "Game Mode will now turn on for unsupported games."
-    			: "Game Mode will now only turn on for native games."
+                : "Game Mode will now only turn on for native games."
         }
     }
 

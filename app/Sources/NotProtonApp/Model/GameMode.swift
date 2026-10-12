@@ -1,10 +1,4 @@
-// macOS Game Mode: the Xcode tool that controls it, its live state, and the
-// setting that decides whether games launched from Steam force it on.
-//
-// gamepolicyctl is the only tool that can talk to gamepolicyd, which is what
-// controls Game Mode, and it ships with Xcode rather than with the system, so
-// using it means the user has to have Xcode installed. It runs without admin
-// credentials, which keeps the trigger on game launch transparent.
+// Manages Game Mode state and user preferences
 
 import Foundation
 
@@ -29,20 +23,15 @@ struct GameModeState: Sendable, Equatable {
     var policy: GameModePolicy = .unknown
     var featureEnabled: Bool = true
 
-    // The one condition the section's readiness messaging turns on: the Xcode
-    // this state settled on actually carries gamepolicyctl.
     var ready: Bool { xcode?.hasTool == true }
 
     static let neutral = GameModeState()
 }
 
-// Runs an executable with arguments and hands its result on. Injectable so
-// tests never touch the machine's real Xcode or developer tools.
+// Allows tests to run without touching the real system
 typealias CommandRunner = @Sendable (String, [String]) throws -> CommandResult
 
-// Runs gamepolicyctl from a chosen Xcode bundle. The tool lives at
-// Contents/Developer/usr/bin/gamepolicyctl in the bundle and runs without
-// admin credentials, so no xcrun and no DEVELOPER_DIR are needed.
+// Runs gamepolicyctl from a chosen Xcode bundle
 enum GamePolicyCtl {
 
     static let run: CommandRunner = { executable, arguments in
@@ -74,8 +63,7 @@ enum GamePolicyCtl {
         }
     }
 
-    // gamepolicyctl colorizes its words, so the escape sequences go first.
-    // Parsing then matches the plain sentences the color hides.
+    // Removes color formatting to ensure clean text parsing
     static func parse(status text: String) -> (GameModeOnState, GameModePolicy) {
         let plain = ANSIEscapes.stripped(text)
 
@@ -100,9 +88,8 @@ enum GamePolicyCtl {
 
 enum ANSIEscapes {
     private static let regex = {
-        // \e[...m: the escape sequences gamepolicyctl wraps its words in.
-        // A literal escape character in the pattern: the braced \u{001B} form
-        // is not regular expression syntax, so it would never compile.
+        // Matches ANSI escape sequences using a literal escape character 
+        // for regex compatibility
         try? NSRegularExpression(pattern: "\u{001B}\\[[0-9;]*m")
     }()
 
@@ -115,9 +102,8 @@ enum ANSIEscapes {
     }
 }
 
-// The user's setting. The run script reads this same file to decide whether a
-// game launch touches the policy, so the format is a word on a line that a
-// shell can test: an absent file means enabled.
+// Shared Game Mode toggle state, stored in a shell-friendly format. 
+// Defaults to enabled if absent
 enum GameModeFeature {
 
     static let step = "Game Mode"
@@ -146,8 +132,7 @@ enum GameModeFeature {
     }
 }
 
-// Gathers the state the status page presents: every Xcode found, the one
-// this machine settles on, and the live policy when the tool can run.
+// Gathers the state the page presents
 enum GameModeSource {
 
     static func capture(
