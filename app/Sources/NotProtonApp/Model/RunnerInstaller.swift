@@ -5,7 +5,7 @@ import Foundation
 
 enum RunnerInstaller {
 
-    static let step = "Clone CrossOver"
+    static let step = String(localized: "Clone CrossOver")
 
     static func clone(
         from install: CrossOverInstall,
@@ -15,7 +15,7 @@ enum RunnerInstaller {
         guard case .supported(let build) = install.support else {
             throw StepFailure(
                 step: step,
-                detail: "\(install.name) is not a supported build. Supported: \(SupportedRunners.versionList)."
+                detail: String(localized: "\(install.name) is not a supported build. Supported: \(SupportedRunners.versionList).")
             )
         }
 
@@ -42,7 +42,7 @@ enum RunnerInstaller {
         return build
     }
 
-    static let removeStep = "Remove build"
+    static let removeStep = String(localized: "Remove build")
 
     @discardableResult
     static func removeClone(
@@ -58,12 +58,12 @@ enum RunnerInstaller {
         let path = target.path(percentEncoded: false)
 
         guard FileManager.default.fileExists(atPath: path) else {
-            throw StepFailure(step: removeStep, detail: "Build \(build) is not set up.")
+            throw StepFailure(step: removeStep, detail: String(localized: "Build \(build) is not set up."))
         }
         guard !running(target) else {
             throw StepFailure(
                 step: removeStep,
-                detail: "A game or Wine tool is still running on build \(build). Quit it first."
+                detail: String(localized: "A game or Wine tool is still running on build \(build). Quit it first.")
             )
         }
 
@@ -107,10 +107,12 @@ enum RunnerInstaller {
     }
 
     static func removePrefixTemplates(
-        keeping builds: Set<String>, libraries: [SteamLibrary], reportBusy: Bool = true
+        keeping builds: Set<String>, libraries: [SteamLibrary], reportBusy: Bool = true,
+        removingFolder: Bool = false
     ) -> [StepFailure] {
         var failures: [StepFailure] = []
         for library in libraries {
+            let earlierFailures = failures.count
             let kept = Set(builds.flatMap {
                 SupportPaths.prefixTemplates(forBuild: $0, in: library).map(\.lastPathComponent)
             })
@@ -129,7 +131,7 @@ enum RunnerInstaller {
                 }
                 let lock = openat(parent, ".notproton-template.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
                 guard lock >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-                defer { close(lock) }
+                defer { FileLock.release(lock) }
                 var lockInfo = stat()
                 guard fstat(lock, &lockInfo) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
                 guard lockInfo.st_mode & S_IFMT == S_IFREG else { throw POSIXError(.EINVAL) }
@@ -156,14 +158,17 @@ enum RunnerInstaller {
                     } catch {
                         failures.append(StepFailure(
                             step: removeStep,
-                            detail: "Could not remove prefix template \(folder.appending(path: name).path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry."
+                            detail: String(localized: "Could not remove prefix template \(folder.appending(path: name).path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry.")
                         ))
                     }
+                }
+                if removingFolder, builds.isEmpty, failures.count == earlierFailures {
+                    unlinkat(parent, SupportPaths.prefixTemplateFolder, AT_REMOVEDIR)
                 }
             } catch {
                 failures.append(StepFailure(
                     step: removeStep,
-                    detail: "Could not clean prefix templates at \(folder.path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry."
+                    detail: String(localized: "Could not clean prefix templates at \(folder.path(percentEncoded: false)): \(error.localizedDescription) Refresh to retry.")
                 ))
             }
         }
@@ -253,7 +258,7 @@ enum RunnerInstaller {
         guard copied.status == 0 else {
             throw StepFailure(
                 step: step,
-                detail: "Copying \(source) failed. \(copied.stderr.trimmingCharacters(in: .whitespacesAndNewlines))"
+                detail: String(localized: "Copying \(source) failed. \(copied.stderr.trimmingCharacters(in: .whitespacesAndNewlines))")
             )
         }
         scrubDownloadMarkers(at: landing)
@@ -268,13 +273,12 @@ enum RunnerInstaller {
     static func verifyClone(build: RunnerBuild, root: URL) throws {
         let loader = Clean.copy(of: CrossOverSource.unixLoader(inRoot: root))
         guard let hash = Digest.sha256IfPresent(loader) else {
-            throw StepFailure(step: step, detail: "The clone has no Wine loader at \(loader.lastPathComponent).")
+            throw StepFailure(step: step, detail: String(localized: "The clone has no Wine loader at \(loader.lastPathComponent)."))
         }
         guard hash == build.loaderSHA256 else {
             throw StepFailure(
                 step: step,
-                detail: "The cloned Wine loader at \(loader.lastPathComponent) does not match build "
-                    + "\(build.id). Expected \(build.loaderSHA256.prefix(16)), found \(hash.prefix(16))."
+                detail: String(localized: "The cloned Wine loader at \(loader.lastPathComponent) does not match build \(build.id). Expected \(build.loaderSHA256.prefix(16)), found \(hash.prefix(16)).")
             )
         }
 

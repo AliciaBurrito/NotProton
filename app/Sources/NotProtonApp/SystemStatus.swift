@@ -247,13 +247,13 @@ final class SystemStatus {
         guard let build = pendingRemoval else { return }
         pendingRemoval = nil
         await perform(from: RunnerInstaller.removeStep) { _ in
-            let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
             try await requireUnblockedContent()
             let changed = try await Task.detached(priority: .userInitiated) {
                 try RunnerInstaller.removeClone(forBuild: build)
             }.value
-            let removed = "Removed build \(SupportedRunners.displayVersion(forID: build))."
+            let removed = String(localized: "Removed build \(SupportedRunners.displayVersion(forID: build)).")
             return changed && SteamBundle.isRunning ? "\(removed) \(Self.toolsRestartHint)" : removed
         }
     }
@@ -264,8 +264,8 @@ final class SystemStatus {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.application]
-        panel.prompt = "Add"
-        panel.message = "Select a copy of CrossOver."
+        panel.prompt = String(localized: "Add")
+        panel.message = String(localized: "Select a copy of CrossOver.")
         panel.directoryURL = URL(filePath: "/Applications", directoryHint: .isDirectory)
 
         guard panel.runModal() == .OK, let picked = panel.url else { return }
@@ -275,7 +275,7 @@ final class SystemStatus {
         outcome = nil
 
         guard CrossOverSource.looksLikeCrossOver(picked) else {
-            setFailure("\(picked.lastPathComponent) is not a valid copy of CrossOver.")
+            setFailure(String(localized: "\(picked.lastPathComponent) is not a valid copy of CrossOver."))
             AppLog.note("crossOver choice refused: \(picked.path(percentEncoded: false))")
             return
         }
@@ -291,8 +291,77 @@ final class SystemStatus {
         await refresh()
     }
 
+    func chooseSteam() async {
+        let current = SupportPaths.Steam.app
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.prompt = String(localized: "Choose")
+        panel.message = String(localized: "Select your copy of Steam.")
+        panel.directoryURL = current.deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let picked = URL(filePath: url.path)
+
+        clearFailure()
+        outcome = nil
+
+        func same(_ a: URL, _ b: URL) -> Bool {
+            a.standardizedFileURL.path(percentEncoded: false) == b.standardizedFileURL.path(percentEncoded: false)
+        }
+        guard !same(picked, current) else { return }
+        if SupportPaths.Steam.isUnreachable(current) {
+            let alert = NSAlert()
+            alert.messageText = String(localized: "Steam at \(current.path(percentEncoded: false)) isn't connected.")
+            alert.informativeText = String(localized: "If NotProton is installed there, it will stay installed. Continue anyway?")
+            alert.addButton(withTitle: String(localized: "Continue Anyway"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        let lock: DeploymentContent.InstallationLock
+        do {
+            lock = try DeploymentContent.acquireInstallationLock()
+        } catch {
+            setFailure(error)
+            return
+        }
+        if let refusal = Self.steamChoiceRefusal(picked, current: current) {
+            lock.release()
+            setFailure(refusal)
+            AppLog.note("steam choice refused: \(picked.path(percentEncoded: false))")
+            return
+        }
+
+        if same(picked, SupportPaths.Steam.defaultApp) {
+            UserDefaults.standard.removeObject(forKey: SupportPaths.Steam.appPathKey)
+        } else {
+            UserDefaults.standard.set(picked.path(percentEncoded: false), forKey: SupportPaths.Steam.appPathKey)
+        }
+        lock.release()
+        AppLog.note("steam chosen: \(picked.path(percentEncoded: false))")
+        await refresh()
+    }
+
+    static func steamChoiceRefusal(
+        _ picked: URL, current: URL, insert: String? = SteamBundle.currentInsert()
+    ) -> String? {
+        guard Bundle(url: picked)?.bundleIdentifier == SteamRepair.valveIdentifier else {
+            return String(localized: "\(picked.lastPathComponent) is not Steam.")
+        }
+        guard !picked.path(percentEncoded: false).contains(":") else {
+            return String(localized: "NotProton cannot use Steam from a folder with a colon in its name.")
+        }
+        let deployed = SupportPaths.Steam.deployedDylib(inBundle: current).path(percentEncoded: false)
+        if let insert, insert.split(separator: ":").contains(Substring(deployed)) {
+            return String(localized: "NotProton is installed in \(current.path(percentEncoded: false)). Use Repair Steam to remove it before choosing another copy of Steam.")
+        }
+        return nil
+    }
+
     private func highlight(_ row: CrossOverRow) {
-        AccessibilityNotification.Announcement("\(row.title) is already listed.").post()
+        AccessibilityNotification.Announcement(String(localized: "\(row.title) is already listed.")).post()
         highlightReset?.cancel()
         highlightedRow = row.id
         highlightReset = Task { [weak self] in
@@ -390,12 +459,12 @@ final class SystemStatus {
         await refresh()
     }
 
-    private static let toolsRestartHint = "Restart Steam to update its list of compatibility tools."
+    private static let toolsRestartHint = String(localized: "Restart Steam to update its list of compatibility tools.")
 
     private func runnerOutcome(_ result: RunnerSetup.Outcome) -> String {
-        if result.stagedNothing { return "Compatibility tool is already set up." }
-        guard result.toolsChanged, SteamBundle.isRunning else { return "Compatibility tool ready." }
-        return "Compatibility tool ready. \(Self.toolsRestartHint)"
+        if result.stagedNothing { return String(localized: "Compatibility tool is already set up.") }
+        guard result.toolsChanged, SteamBundle.isRunning else { return String(localized: "Compatibility tool ready.") }
+        return String(localized: "Compatibility tool ready. \(Self.toolsRestartHint)")
     }
 
     func perform(
@@ -430,15 +499,15 @@ final class SystemStatus {
     private func setUpRunner(from install: CrossOverInstall?, replacingExisting: Bool = false) async {
         guard let install else {
             feedbackPane = .status
-            setFailure("No supported copy of CrossOver found.")
+            setFailure(String(localized: "No supported copy of CrossOver found."))
             AppLog.note("run refused: no supported CrossOver")
             outcome = nil
             return
         }
 
         await perform(from: RunnerSetup.Phase.cloning.label) { progress in
-            let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
             try await requireInstallableContent()
             let result = try await Task.detached(priority: .userInitiated) {
                 try RunnerSetup.run(from: install, replacingExisting: replacingExisting) {
@@ -453,18 +522,18 @@ final class SystemStatus {
     func fetchValveBinaries() async {
         guard canInstall else { return }
         await perform(from: ValveFetcher.Phase.verifying.label) { progress in
-            let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
             try await requireInstallableContent()
             let result = try await ValveFetcher.run { progress($0.label) }
-            return result.wroteNothing ? nil : "Downloaded missing components."
+            return result.wroteNothing ? nil : String(localized: "Downloaded missing components.")
         }
     }
 
-    private static let restartHint = "Steam was stopped, so start it again."
+    private static let restartHint = String(localized: "Steam was stopped, so start it again.")
 
     private static let toolNotActivated =
-        "The compatibility tool was not set up because CrossOver is not activated."
+        String(localized: "The compatibility tool was not set up because CrossOver is not activated.")
 
     private func requireInstallableContent() async throws {
         try await requireUnblockedContent()
@@ -474,7 +543,7 @@ final class SystemStatus {
             }
         }.value
         guard !running else {
-            throw StepFailure(step: SteamInstaller.step, detail: "A game or Wine tool is running. Quit it before updating NotProton.")
+            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "A game or Wine tool is running. Quit it before updating NotProton."))
         }
     }
 
@@ -486,19 +555,19 @@ final class SystemStatus {
         snapshot?.installContent = content
         guard !content.blocksInstallation else {
             throw StepFailure(step: SteamInstaller.step,
-                              detail: "Installation is blocked. Refresh Status and use the NotProton app that installed this build.")
+                              detail: String(localized: "Installation is blocked. Refresh Status and use the NotProton app that installed this build."))
         }
     }
 
     func installIntoSteam() async {
         await perform(from: InstallPhase.checkingPayload.label) { progress in
-            let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
             let result = try await Task.detached(priority: .userInitiated) {
                 try SteamInstaller.run(holdingInstallationLock: true, report: { progress($0.label) })
             }.value
 
-            var parts = ["NotProton successfully installed."]
+            var parts = [String(localized: "NotProton successfully installed.")]
             if result.stoppedClient { parts.append(Self.restartHint) }
             let install = usableCrossOver
             let state = await Task.detached(priority: .userInitiated) {
@@ -508,7 +577,7 @@ final class SystemStatus {
             }.value
 
             if let install, state.license?.licensed == true, state.runner == .none {
-                progress("Setting up compatibility tool")
+                progress(String(localized: "Setting up compatibility tool"))
                 // A tool that came up is the expected case and goes unsaid. Failure
                 // throws, and an unactivated CrossOver is reported below.
                 _ = try await Task.detached(priority: .userInitiated) {
@@ -525,7 +594,7 @@ final class SystemStatus {
                 valve.files.contains { Digest.sha256IfPresent(SupportPaths.bridge.appending(path: $0.bridgePath)) != $0.sha256 }
             }.value
             if needsValve {
-                progress("Downloading missing components")
+                progress(String(localized: "Downloading missing components"))
                 _ = try await ValveFetcher.run { progress($0.label) }
             }
 
@@ -538,15 +607,15 @@ final class SystemStatus {
     }
 
     func setUpdateBlock(_ blocked: Bool) async {
-        await perform(from: blocked ? "Blocking Steam client updates"
-                                    : "Allowing Steam client updates") { _ in
+        await perform(from: blocked ? String(localized: "Blocking Steam client updates")
+                                    : String(localized: "Allowing Steam client updates")) { _ in
             if blocked {
                 try UpdateBlock.write()
-                return "Steam client updates are blocked."
+                return String(localized: "Steam client updates are blocked.")
             }
 
             try UpdateBlock.remove()
-            return "Steam client updates are allowed."
+            return String(localized: "Steam client updates are allowed.")
         }
     }
 
@@ -576,41 +645,39 @@ final class SystemStatus {
 
     func repairSteam() async {
         await perform(from: RepairPhase.checking.label) { progress in
-            let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
-            let result = try await SteamRepair.run { progress($0.label) }
+            let lock = try DeploymentContent.acquireInstallationLock()
+            defer { lock.release() }
+            let result = try await SteamRepair.run(report: { progress($0.label) })
 
-            var parts = ["Steam restored to its original state."]
+            var parts = [String(localized: "Steam restored to its original state.")]
             if result.stoppedClient { parts.append(Self.restartHint) }
             return parts.joined(separator: " ")
         }
     }
 
     func resetControllerPermission() async {
-        await perform(from: "Resetting Steam's controller permission") { _ in
+        await perform(from: String(localized: "Resetting Steam's controller permission")) { _ in
             let failed = SteamInstaller.failedInputAccessResets()
             guard failed.isEmpty else {
                 throw StepFailure(
-                    step: "Reset controller permission",
-                    detail: "macOS did not reset \(failed.joined(separator: ", ")) for Steam."
+                    step: String(localized: "Reset controller permission"),
+                    detail: String(localized: "macOS did not reset \(failed.joined(separator: ", ")) for Steam.")
                 )
             }
             return SteamBundle.isRunning
-                ? "Controller permission reset. Restart Steam so macOS asks again."
-                : "Controller permission reset. macOS asks again when Steam starts."
+                ? String(localized: "Controller permission reset. Restart Steam so macOS asks again.")
+                : String(localized: "Controller permission reset. macOS asks again when Steam starts.")
         }
     }
 
     func removeEverything() async {
         await perform(from: UninstallPhase.stoppingClient.label) { progress in
-            let lock = try DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app)
-            defer { close(lock) }
             let result = try await Uninstall.run { progress($0.label) }
 
-            return result.restoredValveSignature
-                ? "NotProton has been removed."
-                : "NotProton has been removed. Steam needs to be redownloaded. "
-                    + "Please run Repair Steam again once you are online."
+            if let partial = result.partialRemoval { return partial }
+            return result.steamNeedsRedownload
+                ? String(localized: "NotProton has been removed. Steam could not be restored. Reinstall Steam from steampowered.com before using it again.")
+                : String(localized: "NotProton has been removed.")
         }
     }
 
@@ -638,9 +705,9 @@ final class SystemStatus {
     ) async {
         let known = runnerSizes
         let measured = await Task.detached(priority: .utility) {
-            if cleanTemplates, let lock = try? DeploymentContent.acquireInstallationLock(for: SupportPaths.Steam.app) {
+            if cleanTemplates, let lock = try? DeploymentContent.acquireInstallationLock() {
                 RunnerInstaller.removeLeftoverRemovals(runners: runners)
-                close(lock)
+                lock.release()
             }
             let failures = cleanTemplates
                 ? RunnerInstaller.removeStalePrefixTemplates(runners: runners, libraries: libraries, reportBusy: false) : []

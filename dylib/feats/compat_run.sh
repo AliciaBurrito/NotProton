@@ -879,6 +879,28 @@ map_game_drive() {
   fi
 }
 
+# Implementation of Proton's create_fonts_symlinks().
+link_fonts() {
+  [ -f "$WINEPREFIX/system.reg" ] || return 0
+  fonts_dir="$WINEPREFIX/drive_c/windows/Fonts"
+  mkdir -p "$fonts_dir" 2>> "$log" || return 0
+  for dir in "$np_support/fonts" "$CX_ROOT/share/wine/fonts"; do
+    for src in "$dir"/*.ttf "$dir"/*.ttc; do
+      [ -f "$src" ] || continue
+      name=$(basename "$src")
+      case "$app_id:$name" in
+        1313860:arial.ttf|1506830:arial.ttf) src="$dir/alt/$name" ;;
+      esac
+      dst="$fonts_dir/$name"
+      if [ -L "$dst" ]; then
+        rm -f "$dst" && ln -s "$src" "$dst" 2>> "$log" || true
+      elif [ ! -e "$dst" ]; then
+        ln -s "$src" "$dst" 2>> "$log" || true
+      fi
+    done
+  done
+}
+
 if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   export WINEPREFIX="$STEAM_COMPAT_DATA_PATH/pfx"
   stage_step="prefix lock"
@@ -912,6 +934,8 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   map_game_drive
   stage_step="prefix settings"
   import_prefix_settings
+  stage_step="fonts"
+  link_fonts
   # A prefix that Wine built just now only has dosdevices from this point on.
   stage_step="game drive"
   map_game_drive
@@ -987,6 +1011,21 @@ install_legacycompat() {
       echo "=== could not copy legacycompat/$b to $dst/$b ===" >> "$log" 2>&1 || true
     fi
   done
+}
+
+# Steam on Linux symlinks this for every compat tool launch. Is needed for some legacy games.
+link_legacy_steam_dll() {
+  src="$STEAM_COMPAT_CLIENT_INSTALL_PATH/legacycompat/Steam.dll"
+  [ -n "$STEAM_COMPAT_INSTALL_PATH" ] && [ -f "$src" ] || return 0
+  dst="$(dirname "$STEAM_COMPAT_INSTALL_PATH")/Steam.dll"
+  [ -L "$dst" ] || [ ! -e "$dst" ] || return 0
+  [ "$(readlink "$dst" 2>/dev/null)" = "$src" ] && return 0
+  if ln -sfn "$src" "$dst" 2>> "$log"; then
+    chflags -h hidden "$dst" 2>/dev/null || true
+    echo "=== linked legacy Steam.dll at $dst ===" >> "$log" 2>&1 || true
+  else
+    echo "=== could not link legacy Steam.dll at $dst ===" >> "$log" 2>&1 || true
+  fi
 }
 
 bridge_files="steamclient64.dll steamclient.dll tier0_s64.dll vstdlib_s64.dll"
@@ -1079,6 +1118,7 @@ if [ -d "$bridge_src" ] && [ -n "$WINEPREFIX" ]; then
     export STEAM_COMPAT_CLIENT_INSTALL_PATH="$native_client"
   fi
   install_legacycompat
+  link_legacy_steam_dll
   echo "=== bridge staged into $prefix_steam ===" >> "$log" 2>&1 || true
   echo "WINEDLLPATH=$WINEDLLPATH" >> "$log" 2>&1 || true
   echo "WINEDLLOVERRIDES=$WINEDLLOVERRIDES" >> "$log" 2>&1 || true
@@ -1147,12 +1187,16 @@ fi
 [ -z "$game_name" ] && game_name="Steam Game"
 # shellcheck disable=SC1003 # the pair deletes a literal backslash, not a quote
 bundle_name=$(printf '%s' "$game_name" | tr -d '/:"`$\\')
+bundle_name=${bundle_name#"${bundle_name%%[!.]*}"}
+[ -n "$bundle_name" ] || bundle_name="Steam Game"
 game_name_xml=$(printf '%s' "$game_name" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
 loader_root="$HOME/Library/Application Support/notproton/launchers/$app_id"
 mkdir -p "$loader_root"
 loader_app="$loader_root/$bundle_name.app"
-rm -rf "$loader_root"/*.app
-loader_contents="$loader_app/Contents"
+find "$loader_root" -maxdepth 1 -name '.build.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
+loader_work=$(mktemp -d "$loader_root/.build.XXXXXX")
+loader_stage="$loader_work/new/$bundle_name.app"
+loader_contents="$loader_stage/Contents"
 loader_macos="$loader_contents/MacOS"
 loader_res="$loader_contents/Resources"
 mkdir -p "$loader_macos" "$loader_res"
@@ -1255,14 +1299,16 @@ cat > "$loader_contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSMicrophoneUsageDescription</key><string>This game would like to access your microphone.</string>
+  <key>NSCameraUsageDescription</key><string>This game would like to access your camera.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>This game would like to access devices on your local network.</string>
 $uielement_arg
 $icon_arg
 </dict>
 </plist>
 PLIST
 
-# Stages the wine tree inside the bundle so macOS treats the launcher as a
-# real app with a dock tile
+# Prepares the bundle structure so the app appears correctly in the Dock
 for f in "$wine_unix"/*; do
   [ -e "$f" ] || continue
   base=${f##*/}
@@ -1273,7 +1319,7 @@ for f in "$wine_unix"/*; do
 done
 ln "$WINELOADER" "$loader_macos/wine" 2>/dev/null || cp "$WINELOADER" "$loader_macos/wine"
 if [ -x "$loader_macos/wine" ]; then
-  WINELOADER="$loader_macos/wine"
+  WINELOADER="$loader_app/Contents/MacOS/wine"
   echo "loader staged in bundle" >> "$log" 2>&1 || true
 else
   echo "loader staging failed, the game runs from the wine tree without a dock tile" >> "$log" 2>&1 || true
@@ -1298,6 +1344,69 @@ fi
 exit \$?
 LAUNCHER
 chmod +x "$loader_macos/launcher"
+
+bundle_listing() {
+  (cd "$1" && find . | LC_ALL=C sort | while IFS= read -r p; do
+    if [ -L "$p" ]; then
+      printf 'l %s %s\n' "$p" "$(readlink "$p")"
+    elif [ -d "$p" ]; then
+      printf 'd %s\n' "$p"
+    else
+      printf 'f %s %s %s\n' "$p" "$(stat -f %Lp "$p")" "$(cksum < "$p")"
+    fi
+  done)
+}
+install_bundle() (
+  exec 7>> "$loader_root/.lock"
+  /usr/bin/lockf -s -t 30 7 || exit 1
+  same=""
+  for b in "$loader_root"/*.app; do
+    if [ "$b" = "$loader_app" ] && [ -d "$b" ] && [ ! -L "$b" ] &&
+       [ "$(bundle_listing "$b")" = "$(bundle_listing "$loader_stage")" ]; then
+      same=1
+    fi
+  done
+  if [ -n "$same" ]; then
+    for b in "$loader_root"/*.app "$loader_root"/.[!.]*.app; do
+      if [ "$b" != "$loader_app" ]; then rm -rf "$b" || true; fi
+    done
+    echo "launcher bundle unchanged" >> "$log" 2>&1 || true
+  else
+    stage_identity=$(stat -f '%d:%i' "$loader_stage") || exit 1
+    loader_backup=$(mktemp -d "$loader_root/.backup.XXXXXX") || exit 1
+    finish_bundle() {
+      result=$?
+      trap - EXIT
+      trap '' HUP INT TERM
+      installed_identity=$(stat -f '%d:%i' "$loader_app" 2>/dev/null) || installed_identity=""
+      if [ "$installed_identity" != "$stage_identity" ]; then
+        for saved in "$loader_backup"/* "$loader_backup"/.[!.]*; do
+          [ -e "$saved" ] || [ -L "$saved" ] || continue
+          mv "$saved" "$loader_root/${saved##*/}" || result=1
+        done
+        rmdir "$loader_backup" 2>/dev/null || result=1
+      else
+        rm -rf "$loader_backup" || true
+      fi
+      rm -rf "$loader_work" || true
+      exit "$result"
+    }
+    trap 'finish_bundle' EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    for b in "$loader_root"/*.app "$loader_root"/.[!.]*.app "$loader_app"; do
+      if [ -e "$b" ] || [ -L "$b" ]; then
+        mv "$b" "$loader_backup/${b##*/}" || exit 1
+      fi
+    done
+    mv "$loader_stage" "$loader_app" || exit 1
+    echo "launcher bundle updated" >> "$log" 2>&1 || true
+    finish_bundle
+  fi
+  rm -rf "$loader_work" || true
+)
+install_bundle
 
 wine_helpers='winedevice\.exe|services\.exe|plugplay\.exe|svchost\.exe'
 wine_helpers="$wine_helpers|rpcss\.exe|explorer\.exe|steam\.exe"

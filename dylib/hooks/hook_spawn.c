@@ -3,6 +3,7 @@
 #include "../util/log.h"
 
 #include <spawn.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -20,10 +21,12 @@ static fn_execve      orig_execve;
 static fn_posix_spawn orig_posix_spawn;
 static fn_posix_spawn orig_posix_spawnp;
 
+#define NP_INSERT_KEY "DYLD_INSERT_LIBRARIES="
+
 // The SDL block list stops Steam from seeing a second, generic copy of the Steam Controller.
 // This solves double input issues.
 static const char *const np_steam_only_keys[] = {
-    "DYLD_INSERT_LIBRARIES=",
+    NP_INSERT_KEY,
     "SDL_JOYSTICK_BLACKLIST_DEVICES=",
 };
 
@@ -44,6 +47,54 @@ static int np_target_keeps_insert(const char *path) {
     base = base ? base + 1 : path;
     return strcmp(base, "steam_osx") == 0
         || strcmp(base, "Steam Helper") == 0;
+}
+
+// LaunchServices hands the caller's environment to every app it opens, so the insert
+// lives here instead and only goes back into steam_osx and Steam Helper
+static char *np_insert_entry;
+
+static int np_is_insert(const char *entry) {
+    return strncmp(entry, NP_INSERT_KEY, strlen(NP_INSERT_KEY)) == 0;
+}
+
+static char **np_with_insert(char *const envp[]) {
+    if (!np_insert_entry)
+        return NULL;
+
+    int count = 0;
+    if (envp) {
+        for (; envp[count]; count++) {
+            if (np_is_insert(envp[count]))
+                return NULL;
+        }
+    }
+
+    char **full = malloc(sizeof(char *) * (size_t)(count + 2));
+    if (!full) {
+        NP_WARN("[spawn] cannot allocate an environment with the insert, child starts without it");
+        return NULL;
+    }
+    for (int i = 0; i < count; i++)
+        full[i] = envp[i];
+    full[count] = np_insert_entry;
+    full[count + 1] = NULL;
+    return full;
+}
+
+static void np_take_insert(void) {
+    const char *value = getenv("DYLD_INSERT_LIBRARIES");
+    if (!value || np_insert_entry)
+        return;
+
+    size_t len = strlen(NP_INSERT_KEY) + strlen(value) + 1;
+    np_insert_entry = malloc(len);
+    if (!np_insert_entry) {
+        NP_WARN("[spawn] cannot hold the insert, apps opened from here inherit it");
+        return;
+    }
+    snprintf(np_insert_entry, len, "%s%s", NP_INSERT_KEY, value);
+    unsetenv("DYLD_INSERT_LIBRARIES");
+    NP_LOG("[spawn] insert taken out of the environment");
 }
 
 static char **np_without_insert(char *const envp[]) {
@@ -76,33 +127,29 @@ static char **np_without_insert(char *const envp[]) {
 }
 
 static int np_hook_execve(const char *path, char *const argv[], char *const envp[]) {
-    if (np_target_keeps_insert(path))
-        return orig_execve(path, argv, envp);
-
-    char **clean = np_without_insert(envp);
+    int keep = np_target_keeps_insert(path);
+    char **clean = keep ? np_with_insert(envp) : np_without_insert(envp);
     if (!clean)
         return orig_execve(path, argv, envp);
 
-    NP_DBG("[spawn] execve '%s' without the insert", path);
+    NP_DBG("[spawn] execve '%s' %s the insert", path, keep ? "with" : "without");
     int rc = orig_execve(path, argv, (char *const *)clean);
     // Only reached when the exec failed, since a successful one replaced this image.
     free(clean);
     return rc;
 }
 
-static int np_spawn_without_insert(fn_posix_spawn orig, const char *api,
+static int np_spawn_filtered(fn_posix_spawn orig, const char *api,
                                    pid_t *pid, const char *path,
                                    const posix_spawn_file_actions_t *fa,
                                    const posix_spawnattr_t *attr,
                                    char *const argv[], char *const envp[]) {
-    if (np_target_keeps_insert(path))
-        return orig(pid, path, fa, attr, argv, envp);
-
-    char **clean = np_without_insert(envp);
+    int keep = np_target_keeps_insert(path);
+    char **clean = keep ? np_with_insert(envp) : np_without_insert(envp);
     if (!clean)
         return orig(pid, path, fa, attr, argv, envp);
 
-    NP_DBG("[spawn] %s '%s' without the insert", api, path);
+    NP_DBG("[spawn] %s '%s' %s the insert", api, path, keep ? "with" : "without");
     int rc = orig(pid, path, fa, attr, argv, (char *const *)clean);
     free(clean);
     return rc;
@@ -112,7 +159,7 @@ static int np_hook_posix_spawn(pid_t *pid, const char *path,
                                const posix_spawn_file_actions_t *fa,
                                const posix_spawnattr_t *attr,
                                char *const argv[], char *const envp[]) {
-    return np_spawn_without_insert(orig_posix_spawn, "posix_spawn",
+    return np_spawn_filtered(orig_posix_spawn, "posix_spawn",
                                    pid, path, fa, attr, argv, envp);
 }
 
@@ -120,24 +167,26 @@ static int np_hook_posix_spawnp(pid_t *pid, const char *path,
                                 const posix_spawn_file_actions_t *fa,
                                 const posix_spawnattr_t *attr,
                                 char *const argv[], char *const envp[]) {
-    return np_spawn_without_insert(orig_posix_spawnp, "posix_spawnp",
+    return np_spawn_filtered(orig_posix_spawnp, "posix_spawnp",
                                    pid, path, fa, attr, argv, envp);
 }
 
-static void np_hook_symbol(const char *sym, void *repl, void **orig) {
+static int np_hook_symbol(const char *sym, void *repl, void **orig) {
     void *addr = DobbySymbolResolver("libsystem_kernel.dylib", sym);
     if (!addr)
         addr = DobbySymbolResolver(NULL, sym);
     if (!addr) {
         NP_WARN("[spawn] %s: unresolved, children keep the insert", sym);
-        return;
+        return 0;
     }
 
     int rc = DobbyHook(addr, repl, orig);
-    if (rc == 0)
+    if (rc == 0) {
         NP_LOG("[spawn] %s: hooked @ %p", sym, addr);
-    else
-        NP_WARN("[spawn] %s: DobbyHook failed rc=%d, children keep the insert", sym, rc);
+        return 1;
+    }
+    NP_WARN("[spawn] %s: DobbyHook failed rc=%d, children keep the insert", sym, rc);
+    return 0;
 }
 
 void np_hooks_spawn_install(void) {
@@ -146,7 +195,11 @@ void np_hooks_spawn_install(void) {
         return;
     }
 
-    np_hook_symbol("execve",       (void *)np_hook_execve,       (void **)&orig_execve);
-    np_hook_symbol("posix_spawn",  (void *)np_hook_posix_spawn,  (void **)&orig_posix_spawn);
-    np_hook_symbol("posix_spawnp", (void *)np_hook_posix_spawnp, (void **)&orig_posix_spawnp);
+    int hooked = np_hook_symbol("execve",       (void *)np_hook_execve,       (void **)&orig_execve)
+               + np_hook_symbol("posix_spawn",  (void *)np_hook_posix_spawn,  (void **)&orig_posix_spawn)
+               + np_hook_symbol("posix_spawnp", (void *)np_hook_posix_spawnp, (void **)&orig_posix_spawnp);
+
+    // Without every hook in place, a steam_osx re-exec could start without the dylib
+    if (hooked == 3)
+        np_take_insert();
 }

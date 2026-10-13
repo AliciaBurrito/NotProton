@@ -1,8 +1,10 @@
 CC       := clang
 ARCH     := arm64
 MIN_VER  := 15.0
+GLASS_SDK := 26.0
+AVAIL    := -Werror=unguarded-availability-new
 
-CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) \
+CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
             -std=c17 -O2 -Wall -Wextra -Wno-unused-parameter \
             -fPIC -MMD -MP \
             -Idylib -Ivendor -Ivendor/dobby/include
@@ -59,12 +61,12 @@ TARGET      := $(OUT_DIR)/notproton.dylib
 OBJS := $(patsubst %.c,$(OUT_DIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
-.PHONY: all clean rebuild dobby deploy dylib dylib-install sigcheck app-payload app app-zip \
+.PHONY: all clean rebuild dobby deploy dylib dylib-install sigcheck fonts fonts-install app-payload app app-zip \
         anchorcheck callscheck sigdb-fixtures webpatch-fixtures peicon-fixtures panel-behavior app-tests \
         tests-list overlay-shim overlay-shim-install overlay-shim-tests \
         overlay-shim-bench iconmaker icon \
         appinfo notify helpers-install ntdll-resolve bridge runcheck compatcheck \
-        compatsvc-check scriptcheck envcheck buildcheck settingscheck routecheck bridgecheck gamedrivecheck launch-shell FORCE
+        compatsvc-check scriptcheck envcheck buildcheck settingscheck routecheck bridgecheck gamedrivecheck launchercheck launch-shell FORCE
 
 APP_PAYLOAD := app/Sources/NotProtonApp/Resources/payload
 
@@ -119,6 +121,20 @@ bridgecheck:
 gamedrivecheck:
 	@if [ ! -f dylib/tests/gamedrivecheck.sh ]; then $(call SKIP,gamedrivecheck,dylib/tests/gamedrivecheck.sh); exit 0; fi; \
 	sh dylib/tests/gamedrivecheck.sh dylib/feats/compat_run.sh
+
+launchercheck:
+	@if [ ! -f dylib/tests/launchercheck.sh ]; then $(call SKIP,launchercheck,dylib/tests/launchercheck.sh); exit 0; fi; \
+	sh dylib/tests/launchercheck.sh dylib/feats/compat_run.sh
+
+.PHONY: mincheck
+mincheck:
+	@sh dylib/tests/mincheck.sh "$(APP_BUNDLE)" "$(MIN_VER)" "$(GLASS_SDK)"
+
+.PHONY: l10ncheck
+l10ncheck:
+	@bin=$$(swift build --package-path app -c release --show-bin-path); \
+	python3 dylib/tests/l10ncheck.py app/Sources/NotProtonApp/Resources/Localization/Localizable.xcstrings \
+		"$$bin/../../Intermediates.noindex/NotProtonApp.build/$$(basename "$$bin")" zh-Hans
 
 # runcheck owns compat_run.sh, whose warnings wait for a change that can move
 # the embedded __text baseline
@@ -282,17 +298,21 @@ spawn-live: $(TARGET)
 	  -o $$tmp/steam_osx $(SPAWN_LIVE)/driver.c || exit 1; \
 	cp $$tmp/steam_osx $$tmp/inert; cp $$tmp/child $$tmp/steam_osx_child; \
 	cp $$tmp/child $$tmp/sub/steam_osx; \
+	cp $$tmp/steam_osx "$$tmp/Steam Helper"; cp $$tmp/child "$$tmp/sub/Steam Helper"; \
 	fail=0; \
 	for spec in "inert:child:1" "steam_osx:child:0" \
-	            "steam_osx:steam_osx_child:0" "steam_osx:sub/steam_osx:1"; do \
-		drv=$${spec%%:*}; rest=$${spec#*:}; kid=$${rest%:*}; want=$${rest##*:}; \
-		got=$$(DYLD_INSERT_LIBRARIES=$$PWD/$(TARGET) $$tmp/$$drv $$tmp/$$kid 2>/dev/null \
-		       | grep -c "^DYLD_INSERT_LIBRARIES=") || true; \
+	            "steam_osx:steam_osx_child:0" "steam_osx:sub/steam_osx:1" \
+	            "steam_osx:sub/Steam Helper:1" "Steam Helper:child:0" \
+	            "Steam Helper:sub/Steam Helper:1" "Steam Helper:child:1:--type=renderer"; do \
+		drv=$${spec%%:*}; rest=$${spec#*:}; kid=$${rest%%:*}; rest=$${rest#*:}; \
+		want=$${rest%%:*}; arg=$${rest#*:}; [ "$$arg" = "$$rest" ] && arg=""; \
+		got=$$(DYLD_INSERT_LIBRARIES=$$PWD/$(TARGET) "$$tmp/$$drv" "$$tmp/$$kid" $$arg 2>/dev/null \
+		       | grep -c "/notproton.dylib$$") || true; \
 		if [ "$$got" != "$$want" ]; then \
-			echo "$$drv -> $$kid: insert present $$got, wanted $$want"; fail=1; fi; \
+			echo "$$drv $$arg -> $$kid: insert present $$got, wanted $$want"; fail=1; fi; \
 	done; \
 	if [ $$fail -ne 0 ]; then exit 1; fi; \
-	echo "==> spawn live: the hook lands, steam_osx keeps the insert, other children do not"
+	echo "==> spawn live: the hook lands, steam_osx and Steam Helper keep the insert, other children do not"
 
 APP_TESTS := app/Tests
 
@@ -314,6 +334,7 @@ panel-behavior:
 	node $(PANEL_TESTS)/launch-options.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/shell.js $(OUT_DIR)/panel-emit && \
 	node $(PANEL_TESTS)/migration.js $(OUT_DIR)/panel-emit && \
+	node $(PANEL_TESTS)/localization.js $(OUT_DIR)/panel-emit && \
 	echo "==> panel behavior: renders as expected, no stale arguments"
 
 CX_ROOT ?= /Applications/CrossOver Preview.app
@@ -333,7 +354,7 @@ $(ARM64_DYLIB): $(OBJS)
 
 $(X86_STUB): dylib/stub_x86_64.c
 	@mkdir -p $(dir $@)
-	$(CC) -arch x86_64 -mmacosx-version-min=$(MIN_VER) \
+	$(CC) -arch x86_64 -mmacosx-version-min=$(MIN_VER) $(AVAIL) \
 		-dynamiclib -install_name @rpath/notproton.dylib \
 		-o $@ $<
 
@@ -357,7 +378,7 @@ OVERLAY_SHIM_SRC   := overlay-shim/overlay_shim.m
 OVERLAY_SHIM_ARM   := $(OUT_DIR)/overlay-shim.arm64.dylib
 OVERLAY_SHIM_X86   := $(OUT_DIR)/overlay-shim.x86_64.dylib
 OVERLAY_SHIM       := $(OUT_DIR)/overlay-shim.dylib
-OVERLAY_SHIM_FLAGS := -mmacosx-version-min=$(MIN_VER) -dynamiclib -O2 -Wall -Wextra \
+OVERLAY_SHIM_FLAGS := -mmacosx-version-min=$(MIN_VER) $(AVAIL) -dynamiclib -O2 -Wall -Wextra \
                       -install_name @rpath/overlay-shim.dylib \
                       -framework Metal -framework QuartzCore \
                       -framework CoreGraphics -framework CoreFoundation
@@ -424,7 +445,7 @@ iconmaker: $(ICONMAKER)
 
 $(ICONMAKER): helpers/iconmaker.swift dylib/util/peicon.c dylib/util/peicon.h
 	@mkdir -p $(OUT_DIR)
-	$(CC) -c -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) -std=c17 -O2 \
+	$(CC) -c -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) $(AVAIL) -std=c17 -O2 \
 		-Wall -Wextra -o $(OUT_DIR)/peicon-host.o dylib/util/peicon.c
 	swiftc -O -target $(ARCH)-apple-macos$(MIN_VER) \
 		-framework AppKit -import-objc-header dylib/util/peicon.h \
@@ -474,8 +495,8 @@ dobby:
 		-G "Unix Makefiles"
 	$(MAKE) -C $(DOBBY_DIR) -j$(shell sysctl -n hw.ncpu)
 
-STEAM_APP    := /Applications/Steam.app
-DEPLOY_DST   := $(STEAM_APP)/Contents/MacOS/notproton.dylib
+STEAM_APP    ?= $$(p=$$(defaults read com.notproton.NotProton steamAppPath 2>/dev/null); printf '%s' "$${p:-/Applications/Steam.app}")
+DEPLOY_DST    = $(STEAM_APP)/Contents/MacOS/notproton.dylib
 INSTALL_DST  := $(SUPPORT_DIR)/notproton.dylib
 
 dylib-install: $(TARGET)
@@ -489,7 +510,15 @@ sigdb-install:
 
 LAUNCHABLE_BUNDLES := $(HOME)/Desktop/NotProton.app /Applications/NotProton.app
 
-deploy: $(TARGET) dylib-install sigdb-install helpers-install
+FONT_FILES := --include='*/' --include='*.ttf' --include='*.ttc' --exclude='*'
+
+fonts-install:
+	@if [ ! -d build/fonts ]; then echo "build/fonts is missing, run: $(MAKE) fonts" >&2; exit 1; fi
+	@mkdir -p "$(SUPPORT_DIR)/fonts"
+	@rsync -a --delete $(FONT_FILES) build/fonts/ "$(SUPPORT_DIR)/fonts/"
+	@echo "==> Installed: $(SUPPORT_DIR)/fonts"
+
+deploy: $(TARGET) dylib-install sigdb-install fonts-install helpers-install
 	@if [ ! -d "$(STEAM_APP)" ]; then \
 		echo "==> deploy: $(STEAM_APP) not found"; exit 1; fi
 	$(call install_atomically,$(TARGET),$(DEPLOY_DST))
@@ -522,6 +551,9 @@ bridge:
 	steam-shim/build.sh
 	@echo "==> Built the bridge, now run: $(MAKE) app-payload"
 
+fonts:
+	fonts/build.sh
+
 app-payload: $(TARGET) $(OVERLAY_SHIM) $(ICONMAKER) $(APPINFO) $(NOTIFY_APP)
 	@mkdir -p "$(APP_PAYLOAD)/signatures/macos.arm64"
 	@mkdir -p "$(APP_PAYLOAD)/bridge"
@@ -539,6 +571,9 @@ app-payload: $(TARGET) $(OVERLAY_SHIM) $(ICONMAKER) $(APPINFO) $(NOTIFY_APP)
 		elif [ -f "$$dst" ]; then echo "==> keeping staged $${spec##*:}"; \
 		else echo "$$src is missing and nothing is staged at $$dst, run: $(MAKE) bridge" >&2; exit 1; fi; \
 	done
+	@if [ ! -d build/fonts ]; then echo "build/fonts is missing, run: $(MAKE) fonts" >&2; exit 1; fi
+	@mkdir -p "$(APP_PAYLOAD)/fonts"
+	@rsync -a --delete build/fonts/ "$(APP_PAYLOAD)/fonts/"
 	@stamp="$$(git log -1 --format=%ct 2>/dev/null)"; \
 	if [ -z "$$stamp" ]; then echo "build-time needs a git checkout" >&2; exit 1; fi; \
 	echo "$$stamp" > "$(APP_PAYLOAD)/build-time"
@@ -568,7 +603,7 @@ $(ICON_CAR): $(ICONGEN)
 	$(ICONGEN) "$(ICON_DOC)"
 	@mkdir -p "$(ICON_DIR)"
 	xcrun actool "$(ICON_DOC)" --compile "$(ICON_DIR)" --platform macosx \
-		--minimum-deployment-target 26.0 --app-icon NotProton \
+		--minimum-deployment-target 15.0 --app-icon NotProton \
 		--output-partial-info-plist "$(ICON_DIR)/partial.plist" >/dev/null
 	@echo "==> Built $@"
 
@@ -588,7 +623,12 @@ app: app-payload $(ICON_CAR)
 		"$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework"
 	install_name_tool -add_rpath @executable_path/../Frameworks \
 		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
+	xcrun vtool -set-build-version macos $(MIN_VER) "$$(xcrun --sdk macosx --show-sdk-version)" \
+		-replace -output "$(APP_BUNDLE)/Contents/MacOS/NotProtonApp" \
+		"$(APP_BUNDLE)/Contents/MacOS/NotProtonApp"
 	cp -R "$$(swift build --package-path app -c release --show-bin-path)/NotProtonApp_NotProtonApp.bundle" \
+		"$(APP_BUNDLE)/Contents/Resources/"
+	cp -R "$(APP_BUNDLE)/Contents/Resources/NotProtonApp_NotProtonApp.bundle/Contents/Resources/"*.lproj \
 		"$(APP_BUNDLE)/Contents/Resources/"
 	cp "$(ICON_DIR)/Assets.car" "$(ICON_DIR)/NotProton.icns" \
 		"$(APP_BUNDLE)/Contents/Resources/"

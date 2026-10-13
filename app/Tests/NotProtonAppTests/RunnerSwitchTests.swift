@@ -240,6 +240,27 @@ struct RunnerPrepareTests {
         #expect(toolList(runners)?.contains("notproton-fex\t\(Self.fex.id)\tfex\t") == true)
     }
 
+    @Test("Without FEX support a 1.0 FEX install keeps its legacy name")
+    func legacyFEXNameSurvivesWithoutFEX() throws {
+        let runners = try makeRunners(cloning: [Self.fex])
+        defer { try? FileManager.default.removeItem(at: runners) }
+        try FileManager.default.createSymbolicLink(
+            atPath: runners.appending(path: "current").path(percentEncoded: false),
+            withDestinationPath: "crossover-\(Self.fex.id)/CrossOver"
+        )
+        let sync = {
+            try CompatToolList.sync(
+                runners: runners, bridge: runners.appending(path: "bridge"), file: runners.appending(path: "tools"),
+                compatTools: runners.appending(path: "compatibilitytools.d"), fexAvailable: false
+            )
+        }
+
+        try sync()
+        #expect(holder(runners) == Self.fex.id)
+        try sync()
+        #expect(holder(runners) == Self.fex.id)
+    }
+
     @Test("Setting up a second Preview leaves the legacy name where it is")
     func secondPreviewRenamesNothing() throws {
         let runners = try makeRunners(cloning: [Self.fex])

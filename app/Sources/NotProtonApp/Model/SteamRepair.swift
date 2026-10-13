@@ -16,14 +16,14 @@ enum RepairPhase: Sendable {
     var label: String {
         switch self {
         case .downloading(let progress): progress.label
-        case .unpacking: "Unpacking"
-        case .checking: "Verifying"
-        case .stoppingClient: "Stopping Steam"
-        case .replacing: "Restoring Steam"
-        case .clearingInsert: "Cleaning up"
-        case .removingUpdateBlock: "Cleaning up"
-        case .registering: "Finishing up"
-        case .finished: "Done"
+        case .unpacking: String(localized: "Unpacking")
+        case .checking: String(localized: "Verifying")
+        case .stoppingClient: String(localized: "Stopping Steam")
+        case .replacing: String(localized: "Restoring Steam")
+        case .clearingInsert: String(localized: "Cleaning up")
+        case .removingUpdateBlock: String(localized: "Cleaning up")
+        case .registering: String(localized: "Finishing up")
+        case .finished: String(localized: "Done")
         }
     }
 }
@@ -41,7 +41,7 @@ enum SteamRepair {
     static let valveTeam = "MXGJJ98X76"
     static let valveIdentifier = "com.valvesoftware.steam"
 
-    private static let step = "Repair Steam"
+    private static let step = String(localized: "Repair Steam")
 
     static func run(
         manifest suppliedManifest: ValvePackageManifest? = nil,
@@ -50,13 +50,18 @@ enum SteamRepair {
         updateBlocks: [URL] = UpdateBlock.paths,
         backups: URL = SupportPaths.backups,
         downloads: URL = SupportPaths.packageDownloads,
-        report: @Sendable (RepairPhase) -> Void = { _ in }
+        modifications: SteamModifications = .shared,
+        stopClient: SteamInstaller.ClientStopper = { app, onStopping in
+            try SteamBundle.stopClient(app: app, step: String(localized: "Repair Steam"), onStopping: onStopping)
+        },
+        register: SteamInstaller.BundleRegistrar = { SteamBundle.register($0) },
+        report: @escaping @Sendable (RepairPhase) -> Void = { _ in }
     ) async throws -> RepairOutcome {
         let manifest = try suppliedManifest ?? ValvePackageManifest.bundled()
         guard let bundle = manifest.bundle else {
             throw StepFailure(
                 step: step,
-                detail: "This copy of NotProton cannot repair Steam. Please reinstall NotProton."
+                detail: String(localized: "This copy of NotProton cannot repair Steam. Please reinstall NotProton.")
             )
         }
 
@@ -65,10 +70,23 @@ enum SteamRepair {
         report(.checking)
         try verifyValveSignature(staged)
 
-        let stopped = try SteamBundle.stopClient(app: app, step: step) { report(.stoppingClient) }
+        let stopped = try stopClient(app) { report(.stoppingClient) }
 
+        try modifications.prepare()
         report(.replacing)
         try replace(app, with: staged)
+
+        try verifyValveSignature(app)
+        let plist = app.appending(path: "Contents/Info.plist")
+        if let insert = SteamBundle.currentInsert(at: plist), !insert.isEmpty {
+            AppLog.note("repair: restored bundle still declares \(insert)")
+            throw StepFailure(
+                step: step,
+                detail: String(localized: "Steam could not be fully restored. Please run Repair Steam again.")
+            )
+        }
+
+        _ = try modifications.retireIfClean(app)
 
         report(.clearingInsert)
         let clearedInner = try clearInsert(at: innerPlist)
@@ -77,17 +95,7 @@ enum SteamRepair {
         let removed = try UpdateBlock.remove(from: updateBlocks)
 
         report(.registering)
-        SteamBundle.register(app)
-
-        try verifyValveSignature(app)
-        let plist = app.appending(path: "Contents/Info.plist")
-        if let insert = SteamBundle.currentInsert(at: plist), !insert.isEmpty {
-            AppLog.note("repair: restored bundle still declares \(insert)")
-            throw StepFailure(
-                step: step,
-                detail: "Steam could not be fully restored. Please run Repair Steam again."
-            )
-        }
+        register(app)
 
         let removedBackup = try removeStaleBackup(from: backups)
 
@@ -134,7 +142,7 @@ enum SteamRepair {
         guard files.fileExists(atPath: staged.path(percentEncoded: false)) else {
             throw StepFailure(
                 step: step,
-                detail: "\(bundle.innerArchive) did not contain \(bundle.bundleName)."
+                detail: String(localized: "\(bundle.innerArchive) did not contain \(bundle.bundleName).")
             )
         }
         return staged
@@ -147,7 +155,7 @@ enum SteamRepair {
         guard strict.succeeded else {
             throw StepFailure(
                 step: step,
-                detail: "\(path) does not verify against its own signature. "
+                detail: String(localized: "\(path) does not verify against its own signature. ")
                     + strict.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             )
         }
@@ -164,13 +172,13 @@ enum SteamRepair {
         guard fields.contains("TeamIdentifier=\(valveTeam)") else {
             throw StepFailure(
                 step: step,
-                detail: "\(path) is not signed by Valve. Expected TeamIdentifier=\(valveTeam)."
+                detail: String(localized: "\(path) is not signed by Valve. Expected TeamIdentifier=\(valveTeam).")
             )
         }
         guard fields.contains("Identifier=\(valveIdentifier)") else {
             throw StepFailure(
                 step: step,
-                detail: "\(path) is not the Steam bundle. Expected Identifier=\(valveIdentifier)."
+                detail: String(localized: "\(path) is not the Steam bundle. Expected Identifier=\(valveIdentifier).")
             )
         }
     }
@@ -178,12 +186,30 @@ enum SteamRepair {
     static func replace(_ app: URL, with staged: URL) throws {
         let files = FileManager.default
         try WriteRefused.catching(app) {
+            var staged = staged
+            let folder = app.deletingLastPathComponent()
+            if volume(of: staged) != volume(of: folder) {
+                let copy = folder.appending(path: ".\(app.lastPathComponent).\(UUID().uuidString)")
+                do {
+                    try files.copyItem(at: staged, to: copy)
+                } catch {
+                    try? files.removeItem(at: copy)
+                    throw error
+                }
+                staged = copy
+            }
+            defer { try? files.removeItem(at: staged) }
+
             guard files.fileExists(atPath: app.path(percentEncoded: false)) else {
                 try files.moveItem(at: staged, to: app)
                 return
             }
             _ = try files.replaceItemAt(app, withItemAt: staged)
         }
+    }
+
+    private static func volume(of url: URL) -> URL? {
+        try? url.resourceValues(forKeys: [.volumeURLKey]).volume
     }
 
     static func clearInsert(at plist: URL) throws -> Bool {

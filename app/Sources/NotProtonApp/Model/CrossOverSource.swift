@@ -157,16 +157,14 @@ enum CrossOverSource {
             let ntdll = NtdllPatcher.cleanSource(inRoot: root, arch: arch)
             guard let actual = Digest.sha256IfPresent(ntdll) else {
                 throw StepFailure(
-                    step: "Verify CrossOver",
-                    detail: "\(arch.rawValue)/ntdll.dll is missing from \(root.path(percentEncoded: false))."
+                    step: String(localized: "Verify CrossOver"),
+                    detail: String(localized: "\(arch.rawValue)/ntdll.dll is missing from \(root.path(percentEncoded: false)).")
                 )
             }
             guard actual == expected else {
                 throw StepFailure(
-                    step: "Verify CrossOver",
-                    detail: "\(arch.rawValue)/\(ntdll.lastPathComponent) is not the build "
-                        + "\(build.bundleVersion) copy. Expected \(expected.prefix(16)), "
-                        + "found \(actual.prefix(16))."
+                    step: String(localized: "Verify CrossOver"),
+                    detail: String(localized: "\(arch.rawValue)/\(ntdll.lastPathComponent) is not the build \(build.bundleVersion) copy. Expected \(expected.prefix(16)), found \(actual.prefix(16)).")
                 )
             }
         }

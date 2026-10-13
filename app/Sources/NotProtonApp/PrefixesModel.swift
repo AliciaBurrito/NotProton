@@ -137,7 +137,7 @@ final class PrefixesModel {
     func open(_ tool: WineTool, for prefix: WinePrefix) {
         act(on: prefix) {
             try PrefixTools.launch(tool, in: prefix)
-            return "Opened \(tool.label) in \(prefix.title)."
+            return String(localized: "Opened \(tool.label) in \(prefix.title).")
         }
     }
 
@@ -145,23 +145,29 @@ final class PrefixesModel {
         PrefixTools.reveal(prefix)
     }
 
+    func hasLog(_ log: PrefixLog, for prefix: WinePrefix) -> Bool {
+        PrefixTools.hasLog(log, for: prefix)
+    }
+
+    func open(_ log: PrefixLog, for prefix: WinePrefix) {
+        PrefixTools.open(log, for: prefix)
+    }
+
     func delete(_ targets: [WinePrefix]) async {
         await eachInTurn(targets, { try PrefixTools.delete($0) }) { deleted in
             if deleted.count == 1 {
-                return "Deleted the prefix for \(deleted[0].prefix.title). Steam will make a new "
-                    + "prefix if the game is launched again."
+                return String(localized: "Deleted the prefix for \(deleted[0].prefix.title). Steam will make a new prefix if the game is launched again.")
             }
             guard deleted.count > 1 else { return nil }
-            return "Deleted \(deleted.count) prefixes. Steam will make a new prefix if a game "
-                + "is launched again."
+            return String(localized: "Deleted \(deleted.count) prefixes. Steam will make a new prefix if a game is launched again.")
         }
     }
 
     func backUp(_ targets: [WinePrefix]) async {
         await eachInTurn(targets, makeBackup) { saved in
             guard let first = saved.first else { return nil }
-            guard saved.count == 1 else { return "Backed up \(saved.count) prefixes." }
-            return "Backed up the prefix for \(first.prefix.title)."
+            guard saved.count == 1 else { return String(localized: "Backed up \(saved.count) prefixes.") }
+            return String(localized: "Backed up the prefix for \(first.prefix.title).")
         }
     }
 
@@ -178,16 +184,12 @@ final class PrefixesModel {
             let kept = rebuilt.compactMap(\.made)
             if rebuilt.count == 1 {
                 let title = rebuilt[0].prefix.title
-                guard let backup = kept.first else { return "Rebuilt the prefix for \(title)." }
-                return "Rebuilt the prefix for \(title). The original is at "
-                    + "\(backup.path(percentEncoded: false)). Check that your save is present in "
-                    + "the game, then delete the backup to save space."
+                guard let backup = kept.first else { return String(localized: "Rebuilt the prefix for \(title).") }
+                return String(localized: "Rebuilt the prefix for \(title). The original is at \(backup.path(percentEncoded: false)). Check that your save is present in the game, then delete the backup to save space.")
             }
             guard rebuilt.count > 1 else { return nil }
-            guard !kept.isEmpty else { return "Rebuilt \(rebuilt.count) prefixes." }
-            return "Rebuilt \(rebuilt.count) prefixes. Each original is kept beside the game's "
-                + "prefix. Check that your saves are present in the games, then delete the "
-                + "backups to save space."
+            guard !kept.isEmpty else { return String(localized: "Rebuilt \(rebuilt.count) prefixes.") }
+            return String(localized: "Rebuilt \(rebuilt.count) prefixes. Each original is kept beside the game's prefix. Check that your saves are present in the games, then delete the backups to save space.")
         }
     }
 
@@ -228,12 +230,12 @@ final class PrefixesModel {
         guard !cleared.isEmpty else { return nil }
         let games = Set(cleared.map(\.prefix.id)).count
         if cleared.count == 1 {
-            return "Deleted the backup for \(cleared[0].title)."
+            return String(localized: "Deleted the backup for \(cleared[0].title).")
         }
         if games == 1 {
-            return "Deleted \(cleared.count) backups for \(cleared[0].title)."
+            return String(localized: "Deleted \(cleared.count) backups for \(cleared[0].title).")
         }
-        return "Deleted \(cleared.count) backups across \(games) prefixes."
+        return String(localized: "Deleted \(cleared.count) backups across \(games) prefixes.")
     }
 
     private typealias Step<Made> = (prefix: WinePrefix, made: Made)
@@ -241,7 +243,7 @@ final class PrefixesModel {
     @discardableResult
     private func eachInTurn<Made: Sendable>(
         _ targets: [WinePrefix],
-        _ work: @escaping @Sendable (WinePrefix) throws -> Made,
+        _ work: @escaping @Sendable (WinePrefix) async throws -> Made,
         saying sentence: ([Step<Made>]) -> String?
     ) async -> [Step<Made>] {
         guard !targets.isEmpty else { return [] }
@@ -253,7 +255,7 @@ final class PrefixesModel {
         var refused: [Error] = []
         for prefix in targets {
             do {
-                let made = try await Task.detached { try work(prefix) }.value
+                let made = try await Task.detached { try await work(prefix) }.value
                 done.append((prefix: prefix, made: made))
             } catch {
                 refused.append(error)
@@ -277,8 +279,8 @@ final class PrefixesModel {
         panel.allowsMultipleSelection = false
         let types = PrefixTools.runnableTypes
         if !types.isEmpty { panel.allowedContentTypes = types }
-        panel.prompt = "Run"
-        panel.message = "Choose a Windows program to run in \(prefix.title)."
+        panel.prompt = String(localized: "Run")
+        panel.message = String(localized: "Choose a Windows program to run in \(prefix.title).")
         panel.directoryURL = PrefixStore.installDirectory(of: prefix)
             ?? prefix.pfx.appending(path: "drive_c")
 
@@ -289,7 +291,15 @@ final class PrefixesModel {
     func run(_ executable: URL, in prefix: WinePrefix) {
         act(on: prefix) {
             try PrefixTools.run(executable, in: prefix)
-            return "Started \(executable.lastPathComponent) in \(prefix.title)."
+            return String(localized: "Started \(executable.lastPathComponent) in \(prefix.title).")
+        }
+    }
+
+    func winetricks(_ text: String, in prefix: WinePrefix) async {
+        let verbs = PrefixTools.winetricksVerbs(text)
+        await eachInTurn([prefix], { try await PrefixTools.winetricks(verbs, in: $0) }) { done in
+            guard !done.isEmpty else { return nil }
+            return String(localized: "Winetricks ran \(verbs.joined(separator: " ")) in \(prefix.title).")
         }
     }
 

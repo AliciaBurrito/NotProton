@@ -201,5 +201,44 @@ is "the launch goes on" reached "$(cat "$work/out")"
 logged "the failure is logged" "=== could not copy legacycompat/Steam.dll to $work/client/legacycompat/Steam.dll ==="
 is "the reason is logged" yes "$(grep -q 'Permission denied' "$work/log" && echo yes || echo no)"
 
+echo "== the legacy Steam.dll is linked next to the game folder"
+link=$(sed -n '/^link_legacy_steam_dll() {/,/^}/p' "$SRC")
+[ -n "$link" ] || { echo "FAIL: link_legacy_steam_dll not found in $SRC"; exit 1; }
+is "the launch links it" 1 "$(grep -c '^  link_legacy_steam_dll$' "$SRC")"
+mkdir -p "$work/lib/common/Game"
+printf 'client Steam.dll\n' > "$work/client/legacycompat/Steam.dll"
+run_link() {
+	env STEAM_COMPAT_CLIENT_INSTALL_PATH="$work/client" STEAM_COMPAT_INSTALL_PATH="$work/lib/common/Game" \
+		log="$work/log" link="$link" sh -ec 'eval "$link"; link_legacy_steam_dll; echo reached' > "$work/out" 2>&1 || true
+}
+: > "$work/log"
+run_link
+is "the launch goes on" reached "$(cat "$work/out")"
+is "a missing link is created" "$work/client/legacycompat/Steam.dll" "$(readlink "$work/lib/common/Steam.dll")"
+logged "the link is logged" "=== linked legacy Steam.dll at $work/lib/common/Steam.dll ==="
+is "a new link is hidden" hidden "$(stat -f %Sf "$work/lib/common/Steam.dll")"
+is "the linked file is not hidden" - "$(stat -f %Sf "$work/client/legacycompat/Steam.dll")"
+chflags -h nohidden "$work/lib/common/Steam.dll"
+: > "$work/log"
+run_link
+is "a current link is left alone" "" "$(cat "$work/log")"
+is "a current link is not touched" - "$(stat -f %Sf "$work/lib/common/Steam.dll")"
+ln -sfn "$work/old/Steam.dll" "$work/lib/common/Steam.dll"
+run_link
+is "a stale link is replaced" "$work/client/legacycompat/Steam.dll" "$(readlink "$work/lib/common/Steam.dll")"
+is "a replaced link is hidden" hidden "$(stat -f %Sf "$work/lib/common/Steam.dll")"
+rm -f "$work/lib/common/Steam.dll"
+printf 'real\n' > "$work/lib/common/Steam.dll"
+run_link
+is "a real file is kept" real "$(cat "$work/lib/common/Steam.dll")"
+is "a real file is not hidden" - "$(stat -f %Sf "$work/lib/common/Steam.dll")"
+rm -f "$work/lib/common/Steam.dll"
+chmod 500 "$work/lib/common"
+: > "$work/log"
+run_link
+chmod 700 "$work/lib/common"
+is "an unwritable library does not stop the launch" reached "$(cat "$work/out")"
+logged "the failure is logged" "=== could not link legacy Steam.dll at $work/lib/common/Steam.dll ==="
+
 [ "$fails" -eq 0 ] || { echo "==> bridgecheck: $fails failure(s)"; exit 1; }
 echo "==> bridgecheck: the bridge stages on fresh, current, stale and incomplete prefixes"

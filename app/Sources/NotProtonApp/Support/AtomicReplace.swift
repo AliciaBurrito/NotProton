@@ -33,7 +33,7 @@ func atomicReplace(_ destination: URL, from source: URL, step: String) throws {
         let reason = String(cString: strerror(code))
         throw StepFailure(
             step: step,
-            detail: "Replacing \(destination.path(percentEncoded: false)) failed. \(reason)"
+            detail: String(localized: "Replacing \(destination.path(percentEncoded: false)) failed. \(reason)")
         )
     }
 }
@@ -51,7 +51,7 @@ func atomicReplace(_ destination: URL, with data: Data, step: String) throws {
     } catch {
         throw StepFailure(
             step: step,
-            detail: "\(staging.path(percentEncoded: false)) could not be written. "
+            detail: String(localized: "\(staging.path(percentEncoded: false)) could not be written. ")
                 + error.localizedDescription
         )
     }
@@ -63,7 +63,7 @@ func atomicReplace(_ destination: URL, with data: Data, step: String) throws {
         try? fm.removeItem(at: staging)
         throw StepFailure(
             step: step,
-            detail: "Replacing \(destination.path(percentEncoded: false)) failed. \(reason)"
+            detail: String(localized: "Replacing \(destination.path(percentEncoded: false)) failed. \(reason)")
         )
     }
 }

@@ -12,7 +12,7 @@ struct BackupsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.backups.isEmpty {
                 ContentUnavailableView(
-                    "No Backups",
+                    String(localized: "No Backups"),
                     systemImage: "externaldrive.badge.timemachine"
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -26,7 +26,7 @@ struct BackupsView: View {
             if let failed = model.report {
                 report(
                     StatusRow(
-                        title: "Failed",
+                        title: String(localized: "Failed"),
                         value: failed.message,
                         tone: .bad,
                         action: failed.settingsPane.map { pane in
@@ -35,7 +35,7 @@ struct BackupsView: View {
                     )
                 )
             } else if let outcome = model.outcome {
-                report(StatusRow(title: "Done", value: outcome, tone: .ok))
+                report(StatusRow(title: String(localized: "Done"), value: outcome, tone: .ok))
             }
         }
         .toolbar {
@@ -70,8 +70,8 @@ struct BackupsView: View {
     private var summary: String {
         guard !model.backups.isEmpty else { return "" }
         let size = model.backupBytes.formatted(.byteCount(style: .file))
-        let count = model.backups.count == 1 ? "1 backup" : "\(model.backups.count) backups"
-        return "\(count), \(size) private size"
+        let count = model.backups.count == 1 ? String(localized: "1 backup") : String(localized: "\(model.backups.count) backups")
+        return String(localized: "\(count), \(size) private size")
     }
 
     private var selected: [PrefixBackup] {
@@ -195,7 +195,7 @@ struct BackupsView: View {
     }
 
     private func taken(_ backup: PrefixBackup) -> String {
-        guard let taken = backup.taken else { return "Unknown" }
+        guard let taken = backup.taken else { return String(localized: "Unknown") }
         return taken.formatted(date: .abbreviated, time: .shortened)
     }
 

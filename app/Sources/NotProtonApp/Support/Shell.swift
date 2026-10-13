@@ -25,8 +25,8 @@ struct CommandFailure: LocalizedError {
 
     var errorDescription: String? {
         let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        if detail.isEmpty { return "\(command) failed with status \(status)." }
-        return "\(command) failed with status \(status): \(detail)"
+        if detail.isEmpty { return String(localized: "\(command) failed with status \(status).") }
+        return String(localized: "\(command) failed with status \(status): \(detail)")
     }
 }
 
@@ -100,7 +100,7 @@ enum Shell {
                 command: (executable as NSString).lastPathComponent,
                 status: result.status,
                 stderr: reason.isEmpty && result.outputLost
-                    ? "Its output was still open when it exited, so none was captured."
+                    ? String(localized: "Its output was still open when it exited, so none was captured.")
                     : reason
             )
         }
@@ -122,6 +122,29 @@ enum Shell {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+    }
+
+    static func logged(
+        _ executable: String,
+        _ arguments: [String],
+        environment: [String: String],
+        to log: URL
+    ) throws -> Int32 {
+        guard FileManager.default.createFile(atPath: log.path(percentEncoded: false), contents: nil)
+        else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: log.path(percentEncoded: false)]) }
+        let handle = try FileHandle(forWritingTo: log)
+        defer { try? handle.close() }
+
+        let process = Process()
+        process.executableURL = URL(filePath: executable)
+        process.arguments = arguments
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = handle
+        process.standardError = handle
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
     }
 
     static func processIsRunning(

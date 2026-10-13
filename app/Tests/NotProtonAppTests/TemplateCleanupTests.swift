@@ -82,6 +82,44 @@ struct TemplateCleanupTests {
         #expect(!FileManager.default.fileExists(atPath: layout.template.path))
     }
 
+    @Test("Removing every build takes the empty template folder but keeps the lock and game prefixes")
+    func fullRemovalKeepsLockAndPrefixes() throws {
+        let layout = try Layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        let save = layout.library.compatdata.appending(path: "700330/pfx/drive_c/save.dat")
+        try FileManager.default.createDirectory(at: save.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("save".utf8).write(to: save)
+        let opened = open(layout.lock.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        #expect(opened >= 0)
+        guard opened >= 0 else { return }
+        defer { close(opened) }
+
+        #expect(RunnerInstaller.removePrefixTemplates(keeping: [], libraries: [layout.library], removingFolder: true).isEmpty)
+
+        #expect(!FileManager.default.fileExists(atPath: layout.folder.path))
+        #expect(FileManager.default.fileExists(atPath: layout.lock.path))
+        #expect(FileManager.default.fileExists(atPath: save.path))
+        #expect(flock(opened, LOCK_EX | LOCK_NB) == 0)
+        let next = open(layout.lock.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        #expect(next >= 0)
+        guard next >= 0 else { return }
+        defer { close(next) }
+        #expect(flock(next, LOCK_EX | LOCK_NB) == -1)
+        #expect(errno == EWOULDBLOCK)
+    }
+
+    @Test("A template folder with unknown files keeps the folder and its lock")
+    func unknownFilesKeepFolderAndLock() throws {
+        let layout = try Layout()
+        defer { try? FileManager.default.removeItem(at: layout.root) }
+        try Data("keep".utf8).write(to: layout.folder.appending(path: "notes"))
+
+        #expect(RunnerInstaller.removePrefixTemplates(keeping: [], libraries: [layout.library], removingFolder: true).isEmpty)
+
+        #expect(FileManager.default.fileExists(atPath: layout.folder.appending(path: "notes").path))
+        #expect(FileManager.default.fileExists(atPath: layout.lock.path))
+    }
+
     @MainActor
     @Test("The bridge copies on every drive are counted once")
     func countsBridgeCopies() async throws {
@@ -125,7 +163,7 @@ struct TemplateCleanupTests {
     func reportsBusyLock() throws {
         let layout = try Layout()
         defer { try? FileManager.default.removeItem(at: layout.root) }
-        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)
@@ -165,7 +203,7 @@ struct TemplateCleanupTests {
     func refreshRetriesWithoutRunners() async throws {
         let layout = try Layout()
         defer { try? FileManager.default.removeItem(at: layout.root) }
-        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)
@@ -327,7 +365,7 @@ struct TemplateCleanupTests {
     func swiftLockBlocksShell() throws {
         let layout = try Layout()
         defer { try? FileManager.default.removeItem(at: layout.root) }
-        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(layout.lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)

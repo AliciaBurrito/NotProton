@@ -5,7 +5,7 @@
 import Foundation
 
 enum BridgePayload {
-    static let step = "Copy the built bridge files"
+    static let step = String(localized: "Copy the built bridge files")
 
     struct Entry: Sendable {
         // Two different lsteamclient binaries, one 32 bit and one 64 bit.
@@ -45,7 +45,7 @@ enum BridgePayload {
             guard let payloadRoot = try? InstallPayload.root() else {
                 throw StepFailure(
                     step: step,
-                    detail: "NotProton carries no components."
+                    detail: String(localized: "NotProton carries no components.")
                 )
             }
             base = payloadRoot.appending(path: "bridge")
@@ -67,8 +67,7 @@ enum BridgePayload {
         guard missing.isEmpty else {
             throw StepFailure(
                 step: step,
-                detail: "Missing components: \(missing.joined(separator: ", ")). "
-                    + "Run make app-payload and build the app again."
+                detail: String(localized: "Missing components: \(missing.joined(separator: ", ")). Run make app-payload and build the app again.")
             )
         }
 

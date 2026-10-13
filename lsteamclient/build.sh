@@ -40,7 +40,7 @@
 #   ./build.sh --unix          unix half only
 #   ./build.sh --install       also install to the CrossOver tree and bridge
 #
-# Overridable: WINE_BUILD, WINE_SRC_REL, CX_ROOT, BRIDGE_DIR, UNIX_ARCH
+# Overridable: WINE_BUILD, WINE_SRC_REL, CX_ROOT, BRIDGE_DIR, UNIX_ARCH, MIN_VER
 
 set -eu
 
@@ -51,6 +51,7 @@ WINE_BUILD=${WINE_BUILD:-$repo/scratch/wine-build-dual}
 # Mach-O spells the arm64 arch arm64 and wine spells its directory aarch64-unix, so
 # both names are kept rather than derived from each other at every use.
 UNIX_ARCH=${UNIX_ARCH:-x86_64}
+MIN_VER=${MIN_VER:-15.0}
 case "$UNIX_ARCH" in
 	x86_64) unix_dir=x86_64-unix ;;
 	arm64) unix_dir=aarch64-unix ;;
@@ -154,7 +155,7 @@ if [ "$do_unix" -eq 1 ]; then
 	count=$(echo "$objs" | wc -l | tr -d ' ')
 	echo "==> unix half: $count sources from Makefile.in SOURCES"
 
-	CXXFLAGS="-arch $UNIX_ARCH -I$dll -I$src -Iinclude -I$WINE_SRC_REL/include \
+	CXXFLAGS="-arch $UNIX_ARCH -mmacosx-version-min=$MIN_VER -Werror=unguarded-availability-new -I$dll -I$src -Iinclude -I$WINE_SRC_REL/include \
 -D__WINESRC__ -DSTEAM_API_EXPORTS -Dprivate=public -Dprotected=public -DWINE_UNIX_LIB \
 -fPIC -fasynchronous-unwind-tables -g -O2"
 
@@ -179,7 +180,7 @@ if [ "$do_unix" -eq 1 ]; then
 
 	echo "==> linking $out"
 	# shellcheck disable=SC2086
-	gcc -std=gnu23 -arch "$UNIX_ARCH" -o "$out" -dynamiclib \
+	gcc -std=gnu23 -arch "$UNIX_ARCH" -mmacosx-version-min="$MIN_VER" -o "$out" -dynamiclib \
 		-install_name @rpath/lsteamclient.so -Wl,-rpath,@loader_path/ \
 		$link_objs dlls/ntdll/ntdll.so -lc++ -Wl,-undefined,dynamic_lookup
 

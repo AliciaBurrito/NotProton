@@ -86,20 +86,22 @@ enum SteamBundle {
         guard isRunning else { return false }
         onStopping()
 
-        _ = try? Shell.run("/usr/bin/pkill", ["-x", "steam_osx"])
+        _ = try? Shell.run("/usr/bin/open", ["-g", "steam://exit"])
         for _ in 0..<60 where isRunning {
             Thread.sleep(forTimeInterval: 0.5)
         }
 
         if isRunning {
             _ = try? Shell.run("/usr/bin/pkill", ["-9", "-x", "steam_osx"])
-            Thread.sleep(forTimeInterval: 1)
+            for _ in 0..<10 where isRunning {
+                Thread.sleep(forTimeInterval: 0.5)
+            }
         }
 
         guard !isRunning else {
             throw StepFailure(
                 step: step,
-                detail: "Steam is running, please close Steam."
+                detail: String(localized: "Steam is running, please close Steam.")
             )
         }
 
@@ -110,12 +112,16 @@ enum SteamBundle {
     }
 
     static func sweepPatterns(app: URL, helpers: [URL]) -> [String] {
-        ([app] + helpers).map { $0.path(percentEncoded: false) + "/" }
+        ([app] + helpers).map { url in
+            (url.path(percentEncoded: false) + "/").reduce(into: "") { pattern, character in
+                if "\\.^$|?*+()[]{}".contains(character) { pattern.append("\\") }
+                pattern.append(character)
+            }
+        }
     }
 
     static func register(_ app: URL = SupportPaths.Steam.app) {
-        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks"
-            + "/LaunchServices.framework/Support/lsregister"
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
         _ = try? Shell.run(lsregister, ["-f", app.path(percentEncoded: false)])
     }
 

@@ -19,6 +19,7 @@ enum DeploymentContent {
         let name: String
         var allowsResigning = false
         var executable = false
+        var needsClientStopped = true
 
         func matches() throws -> Bool {
             // Validates directories recursively. Missing sources are 
@@ -101,15 +102,53 @@ enum DeploymentContent {
         versionFile.deletingLastPathComponent().appending(path: "install-build.json")
     }
 
-    static func acquireInstallationLock(for app: URL) throws -> Int32 {
-        let parent = app.deletingLastPathComponent().path(percentEncoded: false)
-        let fd = open(parent, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    struct InstallationLock {
+        fileprivate let descriptors: [Int32]
+
+        func release() {
+            descriptors.reversed().forEach(FileLock.release)
+        }
+    }
+
+    static func acquireInstallationLock(
+        in folder: URL = SupportPaths.applicationSupport,
+        steamFolder: URL? = SupportPaths.Steam.app.deletingLastPathComponent()
+    ) throws -> InstallationLock {
+        let own = try lock(folder, required: true)!
+        guard let steamFolder else { return InstallationLock(descriptors: [own]) }
+        do {
+            guard let steam = try lock(steamFolder, required: false, unless: own) else {
+                return InstallationLock(descriptors: [own])
+            }
+            return InstallationLock(descriptors: [own, steam])
+        } catch {
+            FileLock.release(own)
+            throw error
+        }
+    }
+
+    static func acquireSteamLock(for app: URL, holding lock: InstallationLock) throws -> InstallationLock {
+        let descriptor = try self.lock(app.deletingLastPathComponent(), required: false, unless: lock.descriptors.first)
+        return InstallationLock(descriptors: descriptor.map { [$0] } ?? [])
+    }
+
+    private static func lock(_ folder: URL, required: Bool, unless held: Int32? = nil) throws -> Int32? {
+        let parent = folder.path(percentEncoded: false)
+        let fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC | (required ? O_NOFOLLOW : 0))
         guard fd >= 0 else {
-            throw StepFailure(step: SteamInstaller.step, detail: "Could not lock the installation at \(parent): \(String(cString: strerror(errno))).")
+            if !required, errno == ENOENT || errno == ENOTDIR { return nil }
+            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "Could not lock the installation at \(parent): \(String(cString: strerror(errno)))."))
+        }
+        if let held {
+            var mine = stat(), this = stat()
+            if fstat(held, &mine) == 0, fstat(fd, &this) == 0, mine.st_dev == this.st_dev, mine.st_ino == this.st_ino {
+                close(fd)
+                return nil
+            }
         }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             close(fd)
-            throw StepFailure(step: SteamInstaller.step, detail: "Another installation operation is changing files here. Wait for it to finish.")
+            throw StepFailure(step: SteamInstaller.step, detail: String(localized: "Another installation operation is changing files here. Wait for it to finish."))
         }
         return fd
     }
@@ -118,7 +157,7 @@ enum DeploymentContent {
         guard FileManager.default.fileExists(atPath: file.path(percentEncoded: false)) else { return nil }
         let build = try JSONDecoder().decode(Build.self, from: Data(contentsOf: file))
         guard !build.version.isEmpty, build.builtAt > 0 else {
-            throw StepFailure(step: "Check installed files", detail: "The installed build record is invalid.")
+            throw StepFailure(step: String(localized: "Check installed files"), detail: String(localized: "The installed build record is invalid."))
         }
         return build
     }
@@ -144,15 +183,15 @@ enum DeploymentContent {
             let deployed = try MachOBuild.hashesIgnoringSignature(of: dylib.destination),
             hashes != deployed
         {
-            throw StepFailure(step: "Check installed files",
-                              detail: "Steam's installed dylib does not match this account's build record. Finish or repair its installation with the NotProton app that last installed it.")
+            throw StepFailure(step: String(localized: "Check installed files"),
+                              detail: String(localized: "Steam's installed dylib does not match this account's build record. Finish or repair its installation with the NotProton app that last installed it."))
         }
         return bundled.isNewer(than: installed) ? .update(differences) : .repair(differences)
     }
 
     static func files(
         payload: InstallPayload.Located, bridgePayload: BridgePayload.Located,
-        app: URL, bridge: URL, signatures: URL, overlayShim: URL, iconmaker: URL,
+        app: URL, bridge: URL, signatures: URL, fonts: URL, overlayShim: URL, iconmaker: URL,
         appinfo: URL, notifyApp: URL,
         compatTools: URL, tools: [InstalledTool], runners: URL
     ) -> [File] {
@@ -167,6 +206,10 @@ enum DeploymentContent {
         files += payload.signatures.map {
             File(source: $0, destination: signatures.appending(path: $0.lastPathComponent),
                  name: "signatures/\($0.lastPathComponent)")
+        }
+        files += payload.fonts.map {
+            File(source: payload.fontsRoot.appending(path: $0), destination: fonts.appending(path: $0),
+                 name: "fonts/\($0)", needsClientStopped: false)
         }
         for entry in bridgePayload.sources {
             files += entry.bridgePaths.map {
@@ -198,6 +241,7 @@ enum DeploymentContent {
                 .filter { Digest.sha256IfPresent($0.destination) != $0.hash }.map(\.name)
             let files = files(payload: payload, bridgePayload: bridge, app: SupportPaths.Steam.app,
                               bridge: SupportPaths.bridge, signatures: SupportPaths.signatures,
+                              fonts: SupportPaths.fonts,
                               overlayShim: SupportPaths.overlayShim, iconmaker: SupportPaths.iconmaker,
                               appinfo: SupportPaths.appinfo, notifyApp: SupportPaths.notifyApp,
                               compatTools: SupportPaths.Steam.compatTools,

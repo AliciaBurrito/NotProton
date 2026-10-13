@@ -92,4 +92,11 @@ echo "$authored" | while IFS= read -r f; do
 	cp -f "$here/$f" "$TREE/$f"
 done
 
+mkdir "$TREE/steamworks_sdk_165x"
+for f in steamtypes.h steamclientpublic.h steamnetworkingtypes.h steamuniverse.h; do
+	cp "$TREE/steamworks_sdk_165/$f" "$TREE/steamworks_sdk_165x/"
+done
+cp "$here/steamworks_sdk_165x/isteamnetworkingsocketsserialized.h" "$TREE/steamworks_sdk_165x/"
+patch -p1 -d "$TREE" --forward -s < "$here/serialized005.patch"
+
 echo "==> assembled $TREE with $(echo "$authored" | LC_ALL=C grep -c .) authored files over it"

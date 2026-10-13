@@ -27,6 +27,21 @@ struct PrefixToolsTests {
         )
     }
 
+    @Test("Log paths match where compat_run.sh writes them")
+    func logPathsMatchRunScript() throws {
+        let source = try Self.compatSource()
+        #expect(source.contains(#"log="$STEAM_COMPAT_DATA_PATH/notproton-run.log""#))
+        #expect(source.contains(#"loader_root="$HOME/Library/Application Support/notproton/launchers/$app_id""#))
+        #expect(source.contains(#"wine_log="$loader_root/notproton-wine.log""#))
+
+        let prefix = samplePrefix()
+        let launchers = URL(filePath: "/tmp/launchers")
+        #expect(PrefixLog.launch.url(for: prefix, launchers: launchers) == prefix.root.appending(path: "notproton-run.log"))
+        #expect(PrefixLog.wine.url(for: prefix, launchers: launchers).path(percentEncoded: false)
+            == "/tmp/launchers/1574480/notproton-wine.log")
+        #expect(SupportPaths.launchers.path(percentEncoded: false).hasSuffix("Application Support/notproton/launchers"))
+    }
+
     @Test("The runner variables are the ones RUN_SCRIPT exports")
     func matchesRunScript() throws {
         // A tool under a stale copy of the runner layout writes registry keys the game side then
@@ -179,7 +194,6 @@ struct PrefixToolsTests {
         let exe = dir.appending(path: "setup.exe")
         try Data("MZ".utf8).write(to: exe)
 
-        // No runner, which is the same refusal opening a tool gets.
         #expect(throws: StepFailure.self) {
             try PrefixTools.run(exe, in: samplePrefix(), runner: dir)
         }
@@ -189,6 +203,33 @@ struct PrefixToolsTests {
         #expect(throws: StepFailure.self) {
             try PrefixTools.run(URL(filePath: "/bin/ls"), in: samplePrefix())
         }
+    }
+
+    @Test("Winetricks refuses before it runs when it cannot work or would leave the prefix")
+    func winetricksRefusesEarly() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "np-winetricks-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let script = dir.appending(path: "winetricks")
+
+        #expect(PrefixTools.winetricksVerbs("  vcrun2022\tcorefonts \n") == ["vcrun2022", "corefonts"])
+
+        func refusal(_ verbs: String) -> String? {
+            do {
+                _ = try PrefixTools.winetricks(
+                    PrefixTools.winetricksVerbs(verbs), in: samplePrefix(), script: script, runner: dir)
+                return nil
+            } catch {
+                return (error as? StepFailure)?.detail
+            }
+        }
+        #expect(refusal(" ")?.contains("at least one verb") == true)
+        #expect(refusal("vcrun2022 annihilate")?.contains("annihilate") == true)
+        #expect(refusal("prefix=other corefonts")?.contains("prefix=other") == true)
+        #expect(refusal("--self-update")?.contains("--self-update") == true)
+        #expect(refusal("corefonts")?.contains("No compatibility tool") == true)
+        #expect(!FileManager.default.fileExists(
+            atPath: samplePrefix().root.appending(path: PrefixTools.winetricksLogName).path(percentEncoded: false)))
     }
 
     @Test("Every kind offered by the file picker is a kind that can be run")

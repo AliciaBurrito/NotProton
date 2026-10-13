@@ -2,7 +2,6 @@
 
 import SwiftUI
 
-@main
 struct NotProtonApp: App {
 
     @State private var status = SystemStatus()

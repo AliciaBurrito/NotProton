@@ -10,10 +10,10 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
 
     var label: String {
         switch self {
-        case .status: "Status"
-        case .prefixes: "Prefixes"
-        case .backups: "Prefix Backups"
-        case .enhancements: "Enhancements"
+        case .status: String(localized: "Status")
+        case .prefixes: String(localized: "Prefixes")
+        case .backups: String(localized: "Prefix Backups")
+        case .enhancements: String(localized: "Enhancements")
         }
     }
 

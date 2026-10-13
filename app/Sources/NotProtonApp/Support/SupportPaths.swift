@@ -29,6 +29,7 @@ enum SupportPaths {
         support.appending(path: "signatures/macos.arm64")
     }
 
+    static var fonts: URL { support.appending(path: "fonts") }
     static var overlayShim: URL { support.appending(path: "overlay-shim.dylib") }
     static var iconmaker: URL { support.appending(path: "iconmaker") }
     static var appinfo: URL { support.appending(path: "appinfo") }
@@ -44,6 +45,10 @@ enum SupportPaths {
 
     static var packageDownloads: URL {
         home.appending(path: "Library/Caches/\(supportDirName)/valve-packages")
+    }
+
+    static var winetricksDownloads: URL {
+        home.appending(path: "Library/Caches/\(supportDirName)/winetricks")
     }
 
     static var deployedVersion: URL { support.appending(path: "dylib.version") }
@@ -75,7 +80,15 @@ enum SupportPaths {
     static let bridgeCacheFolder = "bridge"
 
     enum Steam {
-        static var app: URL { URL(filePath: "/Applications/Steam.app") }
+        static let defaultApp = URL(filePath: "/Applications/Steam.app")
+        static let appPathKey = "steamAppPath"
+
+        static var app: URL {
+            UserDefaults.standard.string(forKey: appPathKey).map { URL(filePath: $0) } ?? defaultApp
+        }
+        static func isUnreachable(_ bundle: URL = app) -> Bool {
+            !FileManager.default.fileExists(atPath: bundle.deletingLastPathComponent().path(percentEncoded: false))
+        }
         static var infoPlist: URL { infoPlist(inBundle: app) }
         static var executable: URL { app.appending(path: "Contents/MacOS/steam_osx") }
         static var deployedDylib: URL { deployedDylib(inBundle: app) }

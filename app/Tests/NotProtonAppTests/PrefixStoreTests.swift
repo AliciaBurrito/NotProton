@@ -217,7 +217,7 @@ struct PrefixStoreTests {
         let lock = prefix.root.appending(path: ".notproton-prefix.lock")
         #expect(!PrefixStore.isInUse(prefix, root: root))
         #expect(!FileManager.default.fileExists(atPath: lock.path))
-        let fd = open(lock.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+        let fd = open(lock.path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         try #require(fd >= 0)
         defer { close(fd) }
         try #require(flock(fd, LOCK_EX | LOCK_NB) == 0)

@@ -7,6 +7,8 @@ struct PrefixesView: View {
     @Environment(PrefixesModel.self) private var model
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var sortOrder = [KeyPathComparator(\PrefixRow.lastUsed, order: .reverse)]
+    @State private var winetricksPrefix: WinePrefix?
+    @State private var winetricksVerbs = ""
 
     var body: some View {
         Group {
@@ -15,10 +17,10 @@ struct PrefixesView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.prefixes.isEmpty {
                 ContentUnavailableView(
-                    "No Prefixes",
+                    String(localized: "No Prefixes"),
                     systemImage: "externaldrive",
                     description: Text(
-                        "A prefix appears here once a Windows game has been launched through NotProton."
+                        String(localized: "A prefix appears here once a Windows game has been launched through NotProton.")
                     )
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -31,7 +33,7 @@ struct PrefixesView: View {
             if let failed = model.report {
                 report(
                     StatusRow(
-                        title: "Failed",
+                        title: String(localized: "Failed"),
                         value: failed.message,
                         tone: .bad,
                         action: failed.settingsPane.map { pane in
@@ -42,7 +44,7 @@ struct PrefixesView: View {
             } else if let outcome = model.outcome {
                 report(
                     StatusRow(
-                        title: "Done",
+                        title: String(localized: "Done"),
                         value: outcome,
                         tone: .ok
                     )
@@ -103,6 +105,25 @@ struct PrefixesView: View {
             Button("Cancel", role: .cancel) { model.pendingConfirmation = nil }
         } message: {
             Text(PrefixPrompt.backUpMessage(backingUp))
+        }
+        .alert(
+            "Winetricks",
+            isPresented: Binding(
+                get: { winetricksPrefix != nil },
+                set: { if !$0 { winetricksPrefix = nil } }
+            ),
+            presenting: winetricksPrefix
+        ) { prefix in
+            TextField("vcrun2022 corefonts", text: $winetricksVerbs)
+            Button("Install") {
+                let verbs = winetricksVerbs
+                Task { await model.winetricks(verbs, in: prefix) }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(PrefixTools.winetricksVerbs(winetricksVerbs).isEmpty)
+            Button("Cancel", role: .cancel) {}
+        } message: { prefix in
+            Text("Enter the Winetricks verbs to install in \(prefix.title), separated by spaces.")
         }
     }
 
@@ -172,7 +193,7 @@ struct PrefixesView: View {
     }
 
     private func lastUsed(_ prefix: WinePrefix) -> String {
-        prefix.lastUsed?.formatted(date: .abbreviated, time: .omitted) ?? "Never"
+        prefix.lastUsed?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "Never")
     }
 
     private var libraryWidth: CGFloat {
@@ -192,7 +213,7 @@ struct PrefixesView: View {
             var width = TextWidth.of(prefix.title)
             if model.isStale(prefix) { width += 22 }
             if prefix.name == nil {
-                width += TextWidth.of("No longer installed", size: NSFont.smallSystemFontSize) + 6
+                width += TextWidth.of(String(localized: "No longer installed"), size: NSFont.smallSystemFontSize) + 6
             }
             return width
         }
@@ -321,6 +342,12 @@ struct PrefixesView: View {
                 toolButtons(for: prefix)
                 Divider()
                 Button("Reveal in Finder") { model.reveal(prefix) }
+                Menu("Open Log") {
+                    ForEach(PrefixLog.allCases, id: \.self) { log in
+                        Button(log.label) { model.open(log, for: prefix) }
+                            .disabled(!model.hasLog(log, for: prefix))
+                    }
+                }
             }
             if !targets.isEmpty {
                 Divider()
@@ -353,6 +380,9 @@ struct PrefixesView: View {
     private func toolButtons(for prefix: WinePrefix?) -> some View {
         Button("Run Program…") {
             if let prefix { model.chooseExecutable(for: prefix) }
+        }
+        Button("Winetricks…") {
+            winetricksPrefix = prefix
         }
         Divider()
         ForEach(WineTool.allCases, id: \.self) { tool in

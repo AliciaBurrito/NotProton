@@ -128,6 +128,15 @@ struct CompatToolOrderTests {
         #expect(tools.map(\.build) == ["27.0.0.40921-fex", "27.0.0.40921-fex", "26.3.0.39832"])
     }
 
+    @Test("Without FEX support the ARM64 build offers only its Rosetta tool, unless FEX was already listed")
+    func noFEX() throws {
+        let builds = [try build("27.0.0.41069-fex"), try build("26.3.0.39832")]
+        let fresh = SupportedRunners.tools(for: builds, fexAvailable: false)
+        #expect(fresh.map(\.name) == ["notproton-fex-rosetta-41069", "notproton-26.3"])
+        let kept = SupportedRunners.tools(for: builds, fexAvailable: false, keeping: ["notproton-fex-41069"])
+        #expect(kept.map(\.name) == ["notproton-fex-41069", "notproton-fex-rosetta-41069", "notproton-26.3"])
+    }
+
     @Test("Each Preview keeps its own tools when both are set up")
     func bothPreviews() throws {
         let tools = SupportedRunners.tools(for: [
